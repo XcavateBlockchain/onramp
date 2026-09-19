@@ -1,0 +1,95 @@
+name: Deploy to Hetzner
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Deploys BOTH variants in one run:
+#   https://<host>/staging/    -> tGBP sandbox  (solana-devnet)
+#   https://<host>/production/ -> tGBP live API (solana mainnet)
+#
+# Required repository secrets:
+#   HETZNER_HOST            server IP or hostname
+#   HETZNER_USER            SSH user (e.g. root or a deploy user)
+#   HETZNER_SSH_KEY         private key (ed25519) for that user
+#   HETZNER_SSH_PORT        optional, defaults to 22
+#   TGBP_API_KEY_STAGING    tgbp_sandbox_... key
+#   TGBP_API_KEY_PRODUCTION tgbp_live_... key
+
+env:
+  DEPLOY_DIR: /opt/onramp
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${{ secrets.HETZNER_SSH_PORT || 22 }}" -H "${{ secrets.HETZNER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          cat > ~/.ssh/config <<EOF
+          Host hetzner
+            HostName ${{ secrets.HETZNER_HOST }}
+            User ${{ secrets.HETZNER_USER }}
+            Port ${{ secrets.HETZNER_SSH_PORT || 22 }}
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking yes
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Sync sources to the server
+        run: |
+          rsync -az --delete \
+            --exclude .git \
+            --exclude node_modules \
+            --exclude .nuxt \
+            --exclude .output \
+            --exclude '.env*' \
+            -e ssh \
+            ./ hetzner:${DEPLOY_DIR}/
+
+      - name: Write environment files from secrets
+        run: |
+          ssh hetzner "cat > ${DEPLOY_DIR}/.env.staging" <<EOF
+          NUXT_TGBP_API_KEY=${{ secrets.TGBP_API_KEY_STAGING }}
+          NUXT_TGBP_API_BASE_URL=https://sandbox.tgbp.io
+          NUXT_TGBP_CHAIN=solana-devnet
+          NUXT_PUBLIC_ENV_NAME=staging
+          NUXT_PUBLIC_SOLANA_CLUSTER=devnet
+          EOF
+          ssh hetzner "cat > ${DEPLOY_DIR}/.env.production" <<EOF
+          NUXT_TGBP_API_KEY=${{ secrets.TGBP_API_KEY_PRODUCTION }}
+          NUXT_TGBP_API_BASE_URL=https://api.tgbp.io
+          NUXT_TGBP_CHAIN=solana
+          NUXT_PUBLIC_ENV_NAME=production
+          NUXT_PUBLIC_SOLANA_CLUSTER=mainnet
+          EOF
+          ssh hetzner "chmod 600 ${DEPLOY_DIR}/.env.staging ${DEPLOY_DIR}/.env.production"
+
+      - name: Build and restart containers
+        run: |
+          ssh hetzner <<'EOF'
+          set -e
+          cd /opt/onramp
+          docker compose build
+          docker compose up -d --remove-orphans
+          docker image prune -f
+          EOF
+
+      - name: Health check
+        run: |
+          sleep 5
+          ssh hetzner <<'EOF'
+          set -e
+          curl -fsS http://127.0.0.1:3001/staging/api/health
+          echo
+          curl -fsS http://127.0.0.1:3002/production/api/health
+          echo
+          EOF

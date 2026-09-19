@@ -1,0 +1,38 @@
+services:
+  app-staging:
+    build: .
+    image: tgbp-onramp:latest
+    restart: unless-stopped
+    env_file: .env.staging
+    environment:
+      NITRO_PORT: "3001"
+      NITRO_HOST: 0.0.0.0
+      NUXT_APP_BASE_URL: /staging/
+    ports:
+      - "127.0.0.1:3001:3001"
+
+  app-production:
+    build: .
+    image: tgbp-onramp:latest
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      NITRO_PORT: "3002"
+      NITRO_HOST: 0.0.0.0
+      NUXT_APP_BASE_URL: /production/
+    ports:
+      - "127.0.0.1:3002:3002"
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      # Uncomment once TLS certificates are in ./nginx/certs (see README)
+      # - "443:443"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - app-staging
+      - app-production

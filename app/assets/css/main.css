@@ -1,0 +1,214 @@
+/* ------------------------------------------------------------------
+ * Design tokens — mirror of XcavateMobileApp Resources/Styles/Colors.xaml
+ * and Styles.xaml (which override PlutoFramework defaults).
+ * ------------------------------------------------------------------ */
+:root {
+  /* Brand */
+  --x-blue: #3b4f74;            /* Primary */
+  --x-blue-disabled: #627290;   /* PrimaryUnimportant */
+  --x-pink: #dc7da6;            /* X-PINK / Negative */
+  --x-leafgreen: #357461;       /* X-LEAFGREEN / Positive */
+  --x-secondary: #dfd8f7;       /* pale lavender */
+  --x-tertiary: #65def1;        /* cyan */
+  --x-gentle-pink: #ffecef;     /* GentlePink */
+  --x-gray: #e9e9e9;            /* PrimaryGray */
+  --x-gray-unimportant: #bbbbbb;
+
+  /* Grays (MAUI Gray100..Gray950 scale, only the used stops) */
+  --gray-100: #e1e1e1;
+  --gray-200: #c8c8c8;
+  --gray-300: #acacac;
+  --gray-400: #919191;
+  --gray-500: #6e6e6e;
+  --gray-700: #404040;
+  --gray-900: #212121;
+
+  /* Text */
+  --text: #212121;
+  --text-subdued: #4e4e4e;
+  --text-muted: #888888;
+  --text-faint: #a6a6a6;
+
+  /* Surfaces */
+  --bg: #ffffff;
+  --card-bg: #ffffff;
+  /* TextCardBackgroundColorLight: Primary @ 5% alpha */
+  --card-tint: rgba(59, 79, 116, 0.05);
+  /* status tints (10% alpha like the role badges) */
+  --green-tint: rgba(53, 116, 97, 0.1);
+  --pink-tint: rgba(220, 125, 166, 0.1);
+  --blue-tint: rgba(59, 79, 116, 0.1);
+  --gold-tint: rgba(236, 178, 120, 0.15);
+
+  /* Shape */
+  --radius-card: 10px;      /* CardCornerRadius */
+  --radius-button: 24px;    /* ButtonCornerRadius (pill @ 48px height) */
+  --radius-badge: 12px;
+  --radius-chip: 5px;
+
+  /* CardShadow: Brush=Black Offset=0,0 Radius=2 Opacity=0.16.
+     Layered with a faint border so white cards stay visible on white. */
+  --shadow-card:
+    0 0 2px rgba(0, 0, 0, 0.16),
+    0 1px 4px rgba(0, 0, 0, 0.05);
+
+  /* Brand gradient (SliderView.xaml) */
+  --gradient-brand: linear-gradient(
+    90deg,
+    #ecb278 10%,
+    #dc7da6 40%,
+    #3b4f74 70%,
+    #57a0c5 100%
+  );
+
+  /* Spacing */
+  --gap: 8px;
+  --page-padding-x: 20px;
+
+  --font: 'DM Sans Variable', 'DM Sans', -apple-system, 'Segoe UI', sans-serif;
+}
+
+/* ------------------------------------------------------------------ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--bg);
+  /* iOS webview safe areas */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+h1, h2, h3, p {
+  margin: 0;
+}
+
+button {
+  font-family: inherit;
+}
+
+input {
+  font-family: inherit;
+}
+
+/* Shared primitives -------------------------------------------------- */
+
+.card {
+  background: var(--card-bg);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 16px;
+}
+
+.card--tint {
+  background: var(--card-tint);
+  box-shadow: none;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 48px;
+  border: 0;
+  border-radius: var(--radius-button);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.05s ease;
+}
+
+.btn:active {
+  transform: scale(0.985);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--x-blue);
+  color: #ffffff;
+}
+
+.btn--primary:disabled {
+  background: var(--x-blue-disabled);
+  opacity: 0.7;
+}
+
+.btn--ghost {
+  background: #ffffff;
+  color: var(--x-blue);
+  border: 2px solid var(--x-blue);
+}
+
+.btn--ghost:disabled {
+  color: var(--x-blue-disabled);
+  border-color: var(--x-blue-disabled);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: var(--radius-badge);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.pill--blue { background: var(--blue-tint); color: var(--x-blue); }
+.pill--green { background: var(--green-tint); color: var(--x-leafgreen); }
+.pill--pink { background: var(--pink-tint); color: var(--x-pink); }
+.pill--gold { background: var(--gold-tint); color: #a06b2f; }
+
+.muted { color: var(--text-muted); }
+.subdued { color: var(--text-subdued); }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.pulse {
+  animation: pulse-soft 1.8s ease-in-out infinite;
+}
+
+/* Page fade/slide transition between wizard steps */
+.step-enter-active,
+.step-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.step-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.step-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
