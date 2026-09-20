@@ -52,6 +52,7 @@ jobs:
             --exclude .nuxt \
             --exclude .output \
             --exclude '.env*' \
+            --exclude 'nginx/certs/' \
             -e ssh \
             ./ hetzner:${DEPLOY_DIR}/
 

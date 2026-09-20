@@ -13,6 +13,9 @@ node_modules
 .env.*
 !.env.example
 
+# TLS certificates (live on the server only)
+nginx/certs/
+
 # OS / editor
 .DS_Store
 .idea

@@ -65,10 +65,10 @@ Required repository secrets:
 | `TGBP_API_KEY_STAGING`  | sandbox key (`tgbp_sandbox_…`)           |
 | `TGBP_API_KEY_PRODUCTION` | live key (`tgbp_live_…`)               |
 
-Server prerequisites: Docker with the compose plugin, and ports 80 (and 443 for
-TLS) open. TLS: drop `fullchain.pem`/`privkey.pem` into `nginx/certs` and enable
-the commented HTTPS server block in `nginx/default.conf` (plus port 443 in
-`docker-compose.yml`).
+Server prerequisites: Docker with the compose plugin, and ports 80 and 443 open.
+TLS is configured in `nginx/default.conf` for `onramp.xcavate.io`; certbot on the
+host issues the cert and `fullchain.pem`/`privkey.pem` live in `nginx/certs/`
+(excluded from git and from deploy rsync).
 
 ## Design
 
