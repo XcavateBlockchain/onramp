@@ -9,7 +9,9 @@ interface TgbpErrorPayload {
   error?: {
     code?: string
     message?: string
-    details?: Record<string, unknown>
+    details?: {
+      field_errors?: { field?: string; message?: string }[]
+    }
   }
 }
 
@@ -72,9 +74,22 @@ export async function tgbpFetch<T>(
         ? 'The tGBP service is unavailable. Please try again later.'
         : 'Unexpected error from the tGBP service.')
 
+    // Validation failures carry the rejected fields in details.field_errors —
+    // without them "Request validation failed" says nothing about WHICH field.
+    const fieldDetail = (payload?.error?.details?.field_errors ?? [])
+      .map((f) => (f.field ? `${f.field}: ${f.message}` : f.message))
+      .filter(Boolean)
+      .join('; ')
+
+    // Failed upstream calls are invisible in the container logs otherwise.
+    console.warn(
+      `[tgbp] ${method} ${path} -> ${status} ${code}`,
+      fieldDetail || (payload?.error?.message ?? ''),
+    )
+
     throw createError({
       statusCode: status,
-      message,
+      message: fieldDetail ? `${message} (${fieldDetail})` : message,
       data: { code },
     })
   }

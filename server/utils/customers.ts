@@ -3,10 +3,14 @@ import type { MintDto } from '#shared/types'
 
 /**
  * Customer resolution: the tGBP customer was created by the
- * xcavate-sumsub-webhook service via a Sumsub share-token import.
- * tGBP stores our Sumsub applicantId on the imported customer record
- * (exposed through the customer detail's free-form `metadata`), which is
- * how we map the app's `sumsubId` query parameter to a tGBP customer.
+ * xcavate-sumsub-webhook service via a Sumsub share-token import, and the
+ * webhook records OUR Sumsub applicantId on the customer at creation time
+ * as `metadata.sumsub_applicant_id` — that field is the mapping from the
+ * app's `sumsubId` query parameter to a tGBP customer. (The share-token
+ * import may additionally expose an applicant id somewhere on the detail
+ * record, so a few import-side key names are tried as a fallback; note the
+ * applicant created in tGBP's own Sumsub account has a DIFFERENT id than
+ * ours, which is why the explicit metadata write matters.)
  *
  * The list endpoint omits `metadata`, so we page the list and fetch
  * details in parallel per page. Positive and (short-lived) negative
@@ -81,7 +85,7 @@ async function scanForCustomer(
     const list = await tgbpFetch<{
       data: CustomerSummary[]
       pagination?: { page?: number; total_pages?: number; total?: number }
-    }>(event, `/api/v1/customers?perPage=${PAGE_SIZE}&page=${page}`)
+    }>(event, `/api/v1/customers?per_page=${PAGE_SIZE}&page=${page}`)
 
     const rows = list.data ?? []
     if (rows.length === 0) return null
@@ -131,6 +135,12 @@ export async function resolveCustomerBySumsubId(
 
   const customer = await scanForCustomer(event, sumsubId)
   if (!customer) {
+    // No server-side trace otherwise — a failed lookup is invisible in the
+    // container logs while the user only sees the generic 404 message.
+    console.warn(
+      `[tgbp] no customer carries sumsub_applicant_id=${sumsubId} ` +
+        `(scanned up to ${MAX_PAGES} pages x ${PAGE_SIZE})`,
+    )
     cache.set(sumsubId, { expiresAt: Date.now() + NEGATIVE_TTL_MS })
     throw createError({
       statusCode: 404,
@@ -153,7 +163,7 @@ export async function ensureRecipientAddress(
     event,
     `/api/v1/addresses/recipients?customerId=${encodeURIComponent(
       customerId,
-    )}&chain=${encodeURIComponent(chain)}&perPage=100`,
+    )}&chain=${encodeURIComponent(chain)}&per_page=100`,
   )
 
   const exists = (list.data ?? []).some(

@@ -8,7 +8,7 @@ export default defineEventHandler(async (event): Promise<{ mints: MintDto[] }> =
 
   const list = await tgbpFetch<{ data: any[] }>(
     event,
-    '/api/v1/mints?perPage=50',
+    '/api/v1/mints?per_page=50',
   )
 
   const mints = (list.data ?? [])
