@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { History } from 'lucide-vue-next'
+import { ChevronRight, History } from 'lucide-vue-next'
 import type { MintDto } from '#shared/types'
 
 defineProps<{ mints: MintDto[] }>()
+
+const route = useRoute()
 
 function formatAmount(mint: MintDto) {
   return new Intl.NumberFormat('en-GB', {
@@ -28,13 +30,21 @@ function formatDate(iso: string) {
       Recent mints
     </h2>
     <div class="card history__card">
-      <div v-for="mint in mints" :key="mint.id" class="history__row">
+      <NuxtLink
+        v-for="mint in mints"
+        :key="mint.id"
+        class="history__row"
+        :to="{ path: `/mint/${mint.id}`, query: route.query }"
+      >
         <div class="history__main">
           <span class="history__amount">{{ formatAmount(mint) }}</span>
           <span class="history__date">{{ formatDate(mint.createdAt) }}</span>
         </div>
-        <StatusPill :status="mint.status" />
-      </div>
+        <div class="history__side">
+          <StatusPill :status="mint.status" />
+          <ChevronRight :size="16" class="history__chevron" />
+        </div>
+      </NuxtLink>
     </div>
   </section>
 </template>
@@ -63,7 +73,19 @@ function formatDate(iso: string) {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 0;
+  margin: 0 -8px;
+  padding: 10px 8px;
+  border-radius: var(--radius-card);
+  color: inherit;
+  text-decoration: none;
+}
+
+.history__row:hover {
+  background: var(--card-tint);
+}
+
+.history__row:active {
+  background: var(--blue-tint);
 }
 
 .history__row + .history__row {
@@ -74,6 +96,16 @@ function formatDate(iso: string) {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.history__side {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.history__chevron {
+  color: var(--text-faint);
 }
 
 .history__amount {
