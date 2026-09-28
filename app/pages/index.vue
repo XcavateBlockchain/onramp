@@ -282,7 +282,11 @@ const blockedContent = computed(() => {
 
             <div class="status-banner">
               <LoaderCircle :size="16" class="spin" color="#3B4F74" />
-              <span>Waiting for your payment…</span>
+              <span>{{
+                mint.status === 'paid'
+                  ? 'Payment received — minting your tGBP…'
+                  : 'Waiting for your payment…'
+              }}</span>
               <StatusPill :status="mint.status" />
             </div>
 

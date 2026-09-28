@@ -6,6 +6,7 @@ const props = defineProps<{ status: MintStatus }>()
 
 const map = {
   pending: { label: 'Pending', cls: 'pill--blue', icon: Clock },
+  paid: { label: 'Paid', cls: 'pill--blue', icon: CircleCheck },
   confirmed: { label: 'Confirmed', cls: 'pill--green', icon: CircleCheck },
   failed: { label: 'Failed', cls: 'pill--pink', icon: CircleX },
   cancelled: { label: 'Cancelled', cls: 'pill--gold', icon: Ban },

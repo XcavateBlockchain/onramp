@@ -12,7 +12,7 @@ export interface BankTransferDetails {
   transfer_type?: 'faster_payments' | 'sepa' | 'sepa_instant'
 }
 
-export type MintStatus = 'pending' | 'confirmed' | 'failed' | 'cancelled'
+export type MintStatus = 'pending' | 'paid' | 'confirmed' | 'failed' | 'cancelled'
 
 export interface MintDto {
   id: string
