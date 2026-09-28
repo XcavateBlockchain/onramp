@@ -178,6 +178,9 @@ export async function ensureRecipientAddress(
         customerId,
         chain,
         address,
+        // Not yet in the API docs, but the live API rejects the call without
+        // it: `type: Invalid value. Expected selfcustodial | custodial`.
+        type: 'selfcustodial',
         purpose: 'Transferring funds to my self-hosted wallet',
         label: 'Xcavate mobile wallet',
         useForMint: true,

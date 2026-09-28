@@ -129,8 +129,7 @@ const blockedContent = computed(() => {
         <section v-else-if="step === 'form'" key="form">
           <h1 class="page__heading">{{ greeting }}</h1>
           <p class="subdued page__lede">
-            How much tGBP would you like to mint? You pay in GBP by bank
-            transfer — 1 tGBP always equals £1.
+            How much tGBP would you like to mint?
           </p>
 
           <AmountInput
