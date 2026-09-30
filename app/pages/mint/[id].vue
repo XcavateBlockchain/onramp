@@ -10,7 +10,7 @@ import {
 } from 'lucide-vue-next'
 import type { MintDto } from '#shared/types'
 
-const POLL_INTERVAL_MS = 10_000
+const POLL_INTERVAL_MS = 60_000
 
 const route = useRoute()
 const config = useRuntimeConfig()

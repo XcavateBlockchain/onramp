@@ -3,9 +3,9 @@ import type { RedemptionResolveResponse } from '#shared/types'
 /**
  * Resolve the app-provided identity (Sumsub applicant id + Solana wallet)
  * to a tGBP customer and load their saved bank accounts. Called once when
- * the redemption webview page loads. Unlike the mint resolve, no recipient
- * address is registered — redemption burns FROM the wallet, it does not
- * mint TO it.
+ * the redemption webview page loads. Unlike the mint resolve, no address
+ * registration happens here — redemption burns FROM the wallet, and the
+ * burn address is registered when a redemption is actually created.
  */
 export default defineEventHandler(
   async (event): Promise<RedemptionResolveResponse> => {

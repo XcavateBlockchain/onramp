@@ -27,10 +27,11 @@ https://<host>/production/redemption?sumsubId=<sumsub-applicant-id>&wallet=<sola
   `GET /api/v1/mints/{id}` until the mint is `confirmed` / `failed`.
 - Redemption flow (`/redemption`): resolve the customer the same way → pick or
   add a GBP payout bank account (`GET` / `POST /api/v1/banks`; new accounts stay
-  `redemption_approved: false` until approved on the tGBP side) → screen the
-  source wallet (`POST /api/v1/redemptions/quote`) → create the redemption
-  (`POST /api/v1/redemptions`) → the user burns the exact tGBP amount to the
-  shared protocol `burnAddress` from their wallet → poll
+  `redemption_approved: false` until approved on the tGBP side) → register the
+  wallet as a burn address (`POST /api/v1/addresses/burn`, skipped when already
+  registered) and screen it (`POST /api/v1/redemptions/quote`) → create the
+  redemption (`POST /api/v1/redemptions`) → the user burns the exact tGBP amount
+  to the shared protocol `burnAddress` from their wallet → poll
   `GET /api/v1/redemptions/{id}/with-payout-status` until `paid` / `failed`.
 - Minting and redemption are **Solana-only**: `solana` on production,
   `solana-devnet` on staging.

@@ -12,7 +12,7 @@ import type { RedemptionDto } from '#shared/types'
 
 useHead({ title: 'Redeem tGBP' })
 
-const POLL_INTERVAL_MS = 10_000
+const POLL_INTERVAL_MS = 60_000
 
 /** Statuses where tGBP still moves the redemption forward on its own. */
 const LIVE_STATUSES: RedemptionDto['status'][] = [

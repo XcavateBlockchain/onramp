@@ -26,6 +26,10 @@ export default defineEventHandler(async (event): Promise<RedemptionDto> => {
     })
   }
 
+  // The burn source must be a registered burn address on this customer —
+  // tGBP attributes the on-chain burn to the customer through it.
+  await ensureBurnAddress(event, customer.id, chain, wallet)
+
   // The payout destination must be one of the customer's own bank accounts.
   const banks = await listCustomerBanks(event, customer.id)
   const bank = banks.find((b) => b.id === bankId)

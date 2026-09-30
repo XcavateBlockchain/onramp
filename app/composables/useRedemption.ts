@@ -23,7 +23,7 @@ export interface BankFormDetails {
   nickname: string
 }
 
-const POLL_INTERVAL_MS = 10_000
+const POLL_INTERVAL_MS = 60_000
 
 /** Statuses where tGBP still moves the redemption forward on its own. */
 const LIVE_STATUSES: RedemptionDto['status'][] = [

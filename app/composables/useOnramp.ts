@@ -8,7 +8,7 @@ export type OnrampStep =
   | 'review'
   | 'pay'
 
-const POLL_INTERVAL_MS = 10_000
+const POLL_INTERVAL_MS = 60_000
 
 function apiPath(baseURL: string, path: string) {
   return `${baseURL.replace(/\/$/, '')}/api${path}`

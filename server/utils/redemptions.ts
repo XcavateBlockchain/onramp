@@ -63,8 +63,64 @@ export async function listCustomerBanks(
   return banks
 }
 
-export function toRedemptionDto(redemption: any): RedemptionDto {
-  const fee = Number(redemption.fees?.amount)
+/**
+ * Register the wallet as a burn address if tGBP does not know it yet —
+ * redemptions burn FROM this wallet, and tGBP attributes the on-chain burn
+ * to the customer through this registration (screening happens here too:
+ * a sanctioned address is rejected with 403 `address_rejected`).
+ *
+ * Burn addresses are unique per client across all customers, so a 409 means
+ * either a concurrent registration raced us (fine) or the address belongs
+ * to a different customer (not fine — burns would be attributed to them).
+ */
+export async function ensureBurnAddress(
+  event: H3Event,
+  customerId: string,
+  chain: string,
+  address: string,
+): Promise<{ alreadyRegistered: boolean }> {
+  const listPath =
+    `/api/v1/addresses/burn?customerId=${encodeURIComponent(customerId)}` +
+    `&chain=${encodeURIComponent(chain)}&per_page=100`
+
+  const list = await tgbpFetch<{ data: { address: string }[] }>(
+    event,
+    listPath,
+  )
+  const exists = (list.data ?? []).some(
+    (r) => r.address.toLowerCase() === address.toLowerCase(),
+  )
+  if (exists) return { alreadyRegistered: true }
+
+  try {
+    await tgbpFetch(event, '/api/v1/addresses/burn', {
+      method: 'POST',
+      body: {
+        customerId,
+        chain,
+        address,
+        label: 'Xcavate mobile wallet',
+        IdempotencyKey: idempotencyKey('brn'),
+      },
+    })
+    return { alreadyRegistered: false }
+  } catch (err: any) {
+    if (err?.statusCode === 409) {
+      // Re-check whether the address is registered for THIS customer.
+      const retry = await tgbpFetch<{ data: { address: string }[] }>(
+        event,
+        listPath,
+      )
+      const ours = (retry.data ?? []).some(
+        (r) => r.address.toLowerCase() === address.toLowerCase(),
+      )
+      if (ours) return { alreadyRegistered: true }
+    }
+    throw err
+  }
+}
+
+export function toRedemptionDto(redemption: any): RedemptionDto {  const fee = Number(redemption.fees?.amount)
   return {
     id: redemption.redemptionId ?? redemption.id,
     status: redemption.status,

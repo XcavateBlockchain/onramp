@@ -665,7 +665,6 @@ const burnBanner = computed(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  width: 100%;
   margin: 0 -8px;
   padding: 10px 8px;
   border: 0;
