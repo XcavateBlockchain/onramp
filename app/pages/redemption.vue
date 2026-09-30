@@ -102,11 +102,6 @@ const feeAmount = computed(() => {
   }).format(redemption.value.fee.value)
 })
 
-const greeting = computed(() => {
-  const name = customer.value?.firstName || customer.value?.name
-  return name ? `Hi ${name}` : 'Welcome'
-})
-
 const blockedContent = computed(() => {
   switch (customer.value?.status) {
     case 'pending':
@@ -269,7 +264,6 @@ const burnTxHash = computed(
         <section v-else-if="step === 'amount'" key="amount">
           <StepIndicator :current="1" />
 
-          <h1 class="page__heading">{{ greeting }}</h1>
           <p class="subdued page__lede">
             How much tGBP would you like to redeem?
           </p>

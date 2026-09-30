@@ -11,7 +11,6 @@ import {
   RefreshCw,
   ShieldCheck,
   TriangleAlert,
-  Wallet,
 } from 'lucide-vue-next'
 
 const {
@@ -57,11 +56,6 @@ const mintedAmount = computed(() => {
 })
 
 const bankDetails = computed(() => mint.value?.bankTransferDetails ?? null)
-
-const greeting = computed(() => {
-  const name = customer.value?.firstName || customer.value?.name
-  return name ? `Hi ${name}` : 'Welcome'
-})
 
 const blockedContent = computed(() => {
   switch (customer.value?.status) {
@@ -127,7 +121,6 @@ const blockedContent = computed(() => {
 
         <!-- Amount form ----------------------------------------------- -->
         <section v-else-if="step === 'form'" key="form">
-          <h1 class="page__heading">{{ greeting }}</h1>
           <p class="subdued page__lede">
             How much tGBP would you like to mint?
           </p>
@@ -147,17 +140,6 @@ const blockedContent = computed(() => {
             Continue
             <ArrowRight :size="16" />
           </button>
-
-          <div class="card card--tint destination">
-            <Wallet :size="16" color="#3B4F74" />
-            <div>
-              <p class="destination__label">Destination wallet</p>
-              <p class="destination__value">
-                {{ shortAddress(wallet) }}
-                <span class="muted">· Solana {{ isDevnet ? 'Devnet' : 'Mainnet' }}</span>
-              </p>
-            </div>
-          </div>
 
           <MintHistory :mints="history" />
         </section>
@@ -420,26 +402,6 @@ const blockedContent = computed(() => {
 .icon-badge--green { background: var(--green-tint); color: var(--x-leafgreen); }
 .icon-badge--blue { background: var(--blue-tint); color: var(--x-blue); }
 .icon-badge--gold { background: var(--gold-tint); color: #a06b2f; }
-
-.destination {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 20px;
-  padding: 12px 16px;
-}
-
-.destination__label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.destination__value {
-  font-weight: 700;
-}
 
 .summary {
   padding: 8px 16px;
