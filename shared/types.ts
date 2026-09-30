@@ -46,6 +46,61 @@ export interface ResolveResponse {
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* Redemption (tGBP -> GBP off-ramp)                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A customer's saved bank account as the browser needs it. Account numbers
+ * arrive masked from tGBP (`****1234`) and stay masked end-to-end.
+ */
+export interface BankAccountDto {
+  id: string
+  accountHolderName: string | null
+  bankName: string
+  sortCode: string | null
+  accountNumber: string | null
+  currency: string
+  nickname: string | null
+  isDefault: boolean
+  redemptionApproved: boolean
+}
+
+export type RedemptionStatus =
+  | 'pending'
+  | 'pending_compliance_review'
+  | 'complete'
+  | 'paid'
+  | 'failed'
+  | 'payout_skipped'
+  | 'cancelled'
+
+export interface RedemptionDto {
+  id: string
+  status: RedemptionStatus
+  amount: { currency: string; value: number }
+  fee: { currency: string; value: number } | null
+  chain: string
+  burnAddress: string | null
+  bankAccount: { id: string; name: string; type: string } | null
+  txHash: string | null
+  errorCode: string | null
+  failureReason: string | null
+  payoutStatus: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface RedemptionResolveResponse {
+  customer: ResolveResponse['customer']
+  banks: BankAccountDto[]
+}
+
+export interface RedemptionQuoteDto {
+  verdict: 'low' | 'medium' | 'high' | 'ofac' | 'unavailable'
+  allowed: boolean
+}
+
 export interface ApiErrorBody {
   message: string
   code?: string

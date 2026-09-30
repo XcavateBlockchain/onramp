@@ -1,24 +1,39 @@
 # tGBP Onramp
 
-Mobile-webview website for minting [tGBP](https://tgbp.io) (GBP-pegged stablecoin)
-on **Solana**. Embedded in the Xcavate mobile app via a webview; the app passes the
-user's identity and wallet as query parameters:
+Mobile-webview website for minting and redeeming [tGBP](https://tgbp.io)
+(GBP-pegged stablecoin) on **Solana**. Embedded in the Xcavate mobile app via a
+webview; the app passes the user's identity and wallet as query parameters:
 
 ```
 https://<host>/production/?sumsubId=<sumsub-applicant-id>&wallet=<solana-address>
 https://<host>/staging/?sumsubId=<sumsub-applicant-id>&wallet=<solana-address>
 ```
 
+The redemption (off-ramp) flow lives under `/redemption` with the same query
+parameters:
+
+```
+https://<host>/production/redemption?sumsubId=<sumsub-applicant-id>&wallet=<solana-address>
+```
+
 ## How it works
 
 - **Nuxt 4 (Vue 3)** app with Nitro server routes acting as a backend-for-frontend.
   The tGBP API key lives only on the server — the webview client never sees it.
-- Flow: resolve the `sumsubId` to the tGBP customer created by the
+- Mint flow: resolve the `sumsubId` to the tGBP customer created by the
   [xcavate-sumsub-webhook](../xcavate-sumsub-webhook) service → register the wallet
   as a recipient address (`POST /api/v1/addresses/recipients`) → create the mint
   (`POST /api/v1/mints`) → show the bank transfer details → poll
   `GET /api/v1/mints/{id}` until the mint is `confirmed` / `failed`.
-- Minting is **Solana-only**: `solana` on production, `solana-devnet` on staging.
+- Redemption flow (`/redemption`): resolve the customer the same way → pick or
+  add a GBP payout bank account (`GET` / `POST /api/v1/banks`; new accounts stay
+  `redemption_approved: false` until approved on the tGBP side) → screen the
+  source wallet (`POST /api/v1/redemptions/quote`) → create the redemption
+  (`POST /api/v1/redemptions`) → the user burns the exact tGBP amount to the
+  shared protocol `burnAddress` from their wallet → poll
+  `GET /api/v1/redemptions/{id}/with-payout-status` until `paid` / `failed`.
+- Minting and redemption are **Solana-only**: `solana` on production,
+  `solana-devnet` on staging.
 
 ## Environments
 

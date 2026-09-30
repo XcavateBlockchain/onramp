@@ -39,3 +39,64 @@ export function readAmount(value: unknown): number {
   }
   return amount
 }
+
+export function readBankId(value: unknown): string {
+  if (typeof value !== 'string' || !/^[a-zA-Z0-9_-]{3,64}$/.test(value)) {
+    throw createError({
+      statusCode: 400,
+      message: 'Missing or invalid bank account id.',
+      data: { code: 'validation_error' },
+    })
+  }
+  return value
+}
+
+/** GBP sort code — accepts "123456" or the dashed "12-34-56" form. */
+export function readSortCode(value: unknown): string {
+  const digits = typeof value === 'string' ? value.replace(/-/g, '') : ''
+  if (!/^\d{6}$/.test(digits)) {
+    throw createError({
+      statusCode: 400,
+      message: 'Sort code must be 6 digits.',
+      data: { code: 'validation_error' },
+    })
+  }
+  return digits
+}
+
+/** GBP account number — exactly 8 digits. */
+export function readAccountNumber(value: unknown): string {
+  if (typeof value !== 'string' || !/^\d{8}$/.test(value)) {
+    throw createError({
+      statusCode: 400,
+      message: 'Account number must be exactly 8 digits.',
+      data: { code: 'validation_error' },
+    })
+  }
+  return value
+}
+
+/** Free-text bank field (account holder, bank name, nickname). */
+export function readBankText(
+  value: unknown,
+  label: string,
+  { required = true, maxLength = 100 }: { required?: boolean; maxLength?: number } = {},
+): string | null {
+  const text = typeof value === 'string' ? value.trim() : ''
+  if (!text) {
+    if (!required) return null
+    throw createError({
+      statusCode: 400,
+      message: `${label} is required.`,
+      data: { code: 'validation_error' },
+    })
+  }
+  if (text.length > maxLength) {
+    throw createError({
+      statusCode: 400,
+      message: `${label} is too long (max ${maxLength} characters).`,
+      data: { code: 'validation_error' },
+    })
+  }
+  return text
+}
