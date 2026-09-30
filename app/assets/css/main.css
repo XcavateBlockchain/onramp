@@ -52,15 +52,6 @@
     0 0 2px rgba(0, 0, 0, 0.16),
     0 1px 4px rgba(0, 0, 0, 0.05);
 
-  /* Brand gradient (SliderView.xaml) */
-  --gradient-brand: linear-gradient(
-    90deg,
-    #ecb278 10%,
-    #dc7da6 40%,
-    #3b4f74 70%,
-    #57a0c5 100%
-  );
-
   /* Spacing */
   --gap: 8px;
   --page-padding-x: 20px;
