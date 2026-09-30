@@ -51,6 +51,18 @@ export function readBankId(value: unknown): string {
   return value
 }
 
+/** Solana transaction signature (base58). */
+export function readTxHash(value: unknown): string {
+  if (typeof value !== 'string' || !/^[1-9A-HJ-NP-Za-km-z]{32,90}$/.test(value)) {
+    throw createError({
+      statusCode: 400,
+      message: 'Missing or invalid transaction hash.',
+      data: { code: 'validation_error' },
+    })
+  }
+  return value
+}
+
 /** GBP sort code — accepts "123456" or the dashed "12-34-56" form. */
 export function readSortCode(value: unknown): string {
   const digits = typeof value === 'string' ? value.replace(/-/g, '') : ''

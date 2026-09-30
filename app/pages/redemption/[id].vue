@@ -4,6 +4,7 @@ import {
   CircleCheck,
   CircleX,
   ExternalLink,
+  Flame,
   LoaderCircle,
   RefreshCw,
   TriangleAlert,
@@ -38,6 +39,60 @@ const wallet = computed(() =>
 const redemption = ref<RedemptionDto | null>(null)
 const loading = ref(true)
 const errorMessage = ref('')
+
+const {
+  wallets: solanaWallets,
+  connected: connectedWallet,
+  detected: walletDetected,
+  sendSplBurn,
+} = useSolanaWallet()
+const burnBusy = ref(false)
+const burnError = ref('')
+const txSignature = ref('')
+
+/** No browser wallet around (e.g. the app webview) → manual instructions. */
+const manualMode = computed(
+  () =>
+    walletDetected.value &&
+    solanaWallets.value.length === 0 &&
+    !connectedWallet.value,
+)
+
+/** Send the burn for this (already created) redemption from the connected wallet. */
+async function burnFromDetail() {
+  const current = redemption.value
+  if (!current || !connectedWallet.value || burnBusy.value) return
+  burnBusy.value = true
+  burnError.value = ''
+  try {
+    if (!current.burnAddress || !current.tokenMint) {
+      throw new Error('Burn details are unavailable. Please try again later.')
+    }
+    const signature = await sendSplBurn({
+      mint: current.tokenMint,
+      burnAddress: current.burnAddress,
+      amount: current.amount.value,
+    })
+    txSignature.value = signature
+    try {
+      redemption.value = await $fetch<RedemptionDto>(
+        `${baseURL.replace(/\/$/, '')}/api/redemption/${encodeURIComponent(current.id)}/confirm`,
+        { method: 'POST', body: { sumsubId: sumsubId.value, txHash: signature } },
+      )
+    } catch {
+      // The on-chain listener picks the burn up anyway.
+    }
+  } catch (err: any) {
+    burnError.value =
+      err?.data?.message ?? err?.message ?? 'The burn transaction failed.'
+  } finally {
+    burnBusy.value = false
+  }
+}
+
+const burnTxHash = computed(
+  () => txSignature.value || redemption.value?.txHash || '',
+)
 
 let pollTimer: ReturnType<typeof setInterval> | undefined
 let fetching = false
@@ -156,7 +211,9 @@ const banner = computed(() => {
       return {
         cls: 'banner--blue',
         icon: null,
-        text: 'Waiting for your burn…',
+        text: txSignature.value
+          ? 'Burn submitted — waiting for confirmation…'
+          : 'Waiting for your burn…',
       }
   }
 })
@@ -250,9 +307,9 @@ function explorerUrl(txHash: string) {
         </div>
 
         <a
-          v-if="redemption.txHash && redemption.status !== 'pending' && redemption.status !== 'cancelled'"
+          v-if="burnTxHash && redemption.status !== 'pending' && redemption.status !== 'cancelled'"
           class="explorer"
-          :href="explorerUrl(redemption.txHash)"
+          :href="explorerUrl(burnTxHash)"
           target="_blank"
           rel="noopener"
         >
@@ -260,38 +317,66 @@ function explorerUrl(txHash: string) {
           <ExternalLink :size="14" />
         </a>
 
-        <!-- Burn instructions while the redemption is still pending -->
+        <!-- Complete the burn while the redemption is still pending -->
         <template v-if="redemption.status === 'pending'">
-          <p class="subdued redemption__lede">
-            Send exactly <strong>{{ redeemedAmount }}</strong> to the burn
-            address from your Xcavate wallet. Your GBP payout starts once the
-            burn confirms on-chain.
-          </p>
-
-          <div class="card bank">
-            <CopyField
-              v-if="redemption.burnAddress"
-              label="Burn address"
-              :value="redemption.burnAddress"
-              emphasized
-            />
-            <CopyField label="Amount" :value="redeemedAmount" />
-            <CopyField v-if="wallet" label="Send from" :value="wallet" />
-          </div>
-
-          <div class="card card--tint notice">
-            <TriangleAlert :size="16" color="#DC7DA6" />
-            <p>
-              Burn the <strong>exact amount</strong> from
-              <strong>your wallet</strong> shown above — burns that do not
-              match cannot be matched to your redemption.
+          <template v-if="!manualMode">
+            <p class="subdued redemption__lede">
+              Connect your Solana wallet and burn
+              <strong>{{ redeemedAmount }}</strong>. Your GBP payout starts once
+              the burn confirms on-chain.
             </p>
-          </div>
 
-          <button type="button" class="btn btn--ghost redemption__refresh" @click="load">
-            <RefreshCw :size="16" />
-            Refresh status
-          </button>
+            <div class="redemption__wallets">
+              <WalletConnect />
+            </div>
+
+            <p v-if="burnError" class="redemption__error">{{ burnError }}</p>
+
+            <button
+              v-if="connectedWallet"
+              type="button"
+              class="btn btn--primary redemption__refresh"
+              :disabled="burnBusy"
+              @click="burnFromDetail"
+            >
+              <LoaderCircle v-if="burnBusy" :size="16" class="spin" />
+              <Flame v-else :size="16" />
+              {{ burnBusy ? 'Check your wallet…' : `Burn ${redeemedAmount}` }}
+            </button>
+          </template>
+
+          <template v-else>
+            <p class="subdued redemption__lede">
+              Send exactly <strong>{{ redeemedAmount }}</strong> to the burn
+              address from your Xcavate wallet. Your GBP payout starts once the
+              burn confirms on-chain.
+            </p>
+
+            <div class="card bank">
+              <CopyField
+                v-if="redemption.burnAddress"
+                label="Burn address"
+                :value="redemption.burnAddress"
+                emphasized
+              />
+              <CopyField label="Amount" :value="redeemedAmount" />
+              <CopyField v-if="wallet" label="Send from" :value="wallet" />
+            </div>
+
+            <div class="card card--tint notice">
+              <TriangleAlert :size="16" color="#DC7DA6" />
+              <p>
+                Burn the <strong>exact amount</strong> from
+                <strong>your wallet</strong> shown above — burns that do not
+                match cannot be matched to your redemption.
+              </p>
+            </div>
+
+            <button type="button" class="btn btn--ghost redemption__refresh" @click="load">
+              <RefreshCw :size="16" />
+              Refresh status
+            </button>
+          </template>
         </template>
 
         <NuxtLink
@@ -437,6 +522,17 @@ function explorerUrl(txHash: string) {
 
 .redemption__refresh {
   margin-top: 20px;
+}
+
+.redemption__wallets {
+  margin-top: 4px;
+}
+
+.redemption__error {
+  margin: 12px 2px 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--x-pink);
 }
 
 .redemption__back {

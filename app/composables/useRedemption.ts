@@ -1,7 +1,6 @@
 import type {
   BankAccountDto,
   RedemptionDto,
-  RedemptionQuoteDto,
   RedemptionResolveResponse,
 } from '#shared/types'
 
@@ -23,7 +22,9 @@ export interface BankFormDetails {
   nickname: string
 }
 
-const POLL_INTERVAL_MS = 60_000
+export type BurnPhase = '' | 'creating' | 'signing' | 'confirming'
+
+const POLL_INTERVAL_MS = 10_000
 
 /** Statuses where tGBP still moves the redemption forward on its own. */
 const LIVE_STATUSES: RedemptionDto['status'][] = [
@@ -41,6 +42,7 @@ function readError(err: any): { message: string; code?: string } {
     message:
       err?.data?.message ??
       err?.statusMessage ??
+      err?.message ??
       'Something went wrong. Please try again.',
     code: err?.data?.data?.code ?? err?.data?.code,
   }
@@ -49,6 +51,7 @@ function readError(err: any): { message: string; code?: string } {
 export function useRedemption() {
   const route = useRoute()
   const config = useRuntimeConfig()
+  const solanaWallet = useSolanaWallet()
 
   const baseURL = config.app.baseURL // '/staging/' or '/production/'
   const isDevnet = computed(() => config.public.solanaCluster !== 'mainnet')
@@ -69,8 +72,8 @@ export function useRedemption() {
   const redemption = ref<RedemptionDto | null>(null)
   const history = ref<RedemptionDto[]>([])
   const busy = ref(false)
-  const quote = ref<RedemptionQuoteDto | null>(null)
-  const quoteBusy = ref(false)
+  const burnPhase = ref<BurnPhase>('')
+  const txSignature = ref('')
 
   let pollTimer: ReturnType<typeof setInterval> | undefined
 
@@ -84,6 +87,12 @@ export function useRedemption() {
     banks.value.filter((b) => b.redemptionApproved && b.currency === 'GBP'),
   )
 
+  // The burn is sent by the connected browser wallet when there is one, and
+  // falls back to the app-provided wallet (manual instructions) otherwise.
+  const burnSourceAddress = computed(
+    () => solanaWallet.connected.value?.address || wallet.value,
+  )
+
   function stopPolling() {
     clearInterval(pollTimer)
     pollTimer = undefined
@@ -92,9 +101,9 @@ export function useRedemption() {
   async function resolve() {
     step.value = 'loading'
     errorMessage.value = ''
-    if (!sumsubId.value || !wallet.value) {
+    if (!sumsubId.value) {
       errorMessage.value =
-        'This page must be opened from the mobile app (missing identity or wallet parameters).'
+        'This page must be opened from the mobile app (missing identity parameter).'
       step.value = 'error'
       return
     }
@@ -181,62 +190,91 @@ export function useRedemption() {
     }
   }
 
-  async function review() {
+  function review() {
     if (!selectedBank.value) return
     errorMessage.value = ''
     step.value = 'review'
-
-    // Pre-burn compliance screen — refuse the burn for sanctioned wallets.
-    quote.value = null
-    quoteBusy.value = true
-    try {
-      quote.value = await $fetch<RedemptionQuoteDto>(
-        apiPath(baseURL, '/redemption/quote'),
-        {
-          method: 'POST',
-          body: {
-            sumsubId: sumsubId.value,
-            wallet: wallet.value,
-            amount: amount.value,
-          },
-        },
-      )
-    } catch {
-      // Screening is advisory; the create call re-checks authoritatively.
-      quote.value = { verdict: 'unavailable', allowed: true }
-    } finally {
-      quoteBusy.value = false
-    }
   }
 
   function backToBank() {
     step.value = 'bank'
   }
 
-  async function createRedemption() {
+  function continueToBurn() {
+    errorMessage.value = ''
+    step.value = 'burn'
+  }
+
+  function backToReview() {
+    step.value = 'review'
+  }
+
+  /**
+   * The burn button: create the redemption if it does not exist yet, then —
+   * with a connected browser wallet — build the transfer, have the wallet
+   * sign it, broadcast it, and hand the signature to tGBP so it can start
+   * confirming the payout. Without a wallet this only creates the
+   * redemption; the manual burn instructions take over.
+   */
+  async function burn() {
     if (busy.value || !selectedBank.value) return
     busy.value = true
     errorMessage.value = ''
     try {
-      redemption.value = await $fetch<RedemptionDto>(
-        apiPath(baseURL, '/redemption'),
-        {
-          method: 'POST',
-          body: {
-            sumsubId: sumsubId.value,
-            wallet: wallet.value,
-            amount: amount.value,
-            bankId: selectedBank.value.id,
+      if (!redemption.value) {
+        burnPhase.value = 'creating'
+        redemption.value = await $fetch<RedemptionDto>(
+          apiPath(baseURL, '/redemption'),
+          {
+            method: 'POST',
+            body: {
+              sumsubId: sumsubId.value,
+              wallet: burnSourceAddress.value,
+              amount: amount.value,
+              bankId: selectedBank.value.id,
+            },
           },
-        },
-      )
-      step.value = 'burn'
-      startPolling()
+        )
+        startPolling()
+      }
+
+      const current = redemption.value
+      const conn = solanaWallet.connected.value
+      if (conn && !txSignature.value && current.status === 'pending') {
+        if (!current.burnAddress || !current.tokenMint) {
+          throw new Error(
+            'Burn details are unavailable. Please go back and try again.',
+          )
+        }
+        burnPhase.value = 'signing'
+        const signature = await solanaWallet.sendSplBurn({
+          mint: current.tokenMint,
+          burnAddress: current.burnAddress,
+          amount: current.amount.value,
+        })
+        txSignature.value = signature
+
+        burnPhase.value = 'confirming'
+        try {
+          redemption.value = await $fetch<RedemptionDto>(
+            apiPath(
+              baseURL,
+              `/redemption/${encodeURIComponent(current.id)}/confirm`,
+            ),
+            {
+              method: 'POST',
+              body: { sumsubId: sumsubId.value, txHash: signature },
+            },
+          )
+        } catch {
+          // The on-chain listener picks the burn up anyway.
+        }
+      }
     } catch (err: any) {
       errorMessage.value = readError(err).message
-      // stay on review so the user can retry
     } finally {
       busy.value = false
+      burnPhase.value = ''
     }
   }
 
@@ -289,7 +327,8 @@ export function useRedemption() {
     redemption.value = null
     amount.value = ''
     errorMessage.value = ''
-    quote.value = null
+    burnPhase.value = ''
+    txSignature.value = ''
     step.value = 'amount'
   }
 
@@ -316,10 +355,14 @@ export function useRedemption() {
     redemption,
     history,
     busy,
-    quote,
-    quoteBusy,
+    burnPhase,
+    txSignature,
     sumsubId,
     wallet,
+    burnSourceAddress,
+    connectedWallet: solanaWallet.connected,
+    walletCount: computed(() => solanaWallet.wallets.value.length),
+    walletDetected: solanaWallet.detected,
     isDevnet,
     resolve,
     selectBank,
@@ -330,7 +373,9 @@ export function useRedemption() {
     saveBank,
     review,
     backToBank,
-    createRedemption,
+    continueToBurn,
+    backToReview,
+    burn,
     refreshRedemption,
     cancelRedemption,
     reset,

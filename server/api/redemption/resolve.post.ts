@@ -11,7 +11,11 @@ export default defineEventHandler(
   async (event): Promise<RedemptionResolveResponse> => {
     const body = await readBody(event)
     const sumsubId = readSumsubId(body?.sumsubId)
-    readSolanaAddress(body?.wallet)
+    // The wallet is optional here: in a browser the burn source is the
+    // connected Solana wallet, which is only known once the user connects it.
+    if (typeof body?.wallet === 'string' && body.wallet) {
+      readSolanaAddress(body.wallet)
+    }
 
     const customer = await resolveCustomerBySumsubId(event, sumsubId)
 

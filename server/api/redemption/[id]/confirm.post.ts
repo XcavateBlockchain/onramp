@@ -1,0 +1,34 @@
+import type { RedemptionDto } from '#shared/types'
+
+/**
+ * Tell tGBP the burn transaction was broadcast, so it can start confirming
+ * the payout right away instead of waiting for its on-chain listener.
+ * (Documented fallback: `POST /api/v1/redemptions/{id}/burn-confirmation`.)
+ */
+export default defineEventHandler(async (event): Promise<RedemptionDto> => {
+  const redemptionId = getRouterParam(event, 'id') ?? ''
+  if (!/^[a-zA-Z0-9_-]{3,64}$/.test(redemptionId)) {
+    throw createError({
+      statusCode: 400,
+      message: 'Invalid redemption id.',
+      data: { code: 'validation_error' },
+    })
+  }
+
+  const body = await readBody(event)
+  const sumsubId = readSumsubId(body?.sumsubId)
+  const txHash = readTxHash(body?.txHash)
+  const customer = await resolveCustomerBySumsubId(event, sumsubId)
+
+  await getOwnedRedemption(event, customer.id, redemptionId)
+
+  const confirmed = await tgbpFetch<{ data: any }>(
+    event,
+    `/api/v1/redemptions/${encodeURIComponent(redemptionId)}/burn-confirmation`,
+    { method: 'POST', body: { txHash } },
+  )
+
+  const dto = toRedemptionDto(confirmed.data)
+  dto.tokenMint = await getTgbpMint(event)
+  return dto
+})

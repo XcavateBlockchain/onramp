@@ -87,6 +87,8 @@ export interface RedemptionDto {
   errorCode: string | null
   failureReason: string | null
   payoutStatus: string | null
+  /** tGBP mint address on this chain — the browser needs it to build the burn tx. */
+  tokenMint?: string | null
   createdAt: string
   updatedAt: string
 }

@@ -15,6 +15,48 @@ import type { BankAccountDto, RedemptionDto } from '#shared/types'
 const MAX_PAGES = 10
 const PAGE_SIZE = 100
 
+/**
+ * The tGBP mint address for the configured chain, needed client-side to
+ * build the burn transfer. Resolved (and cached) from the tGBP chain
+ * details, which carry a `contract_address` operational field; an env
+ * override (NUXT_TGBP_MINT_ADDRESS) wins when set. The sandbox/devnet mint
+ * is known from the xcavate-sumsub-webhook service and used as fallback.
+ */
+let mintCache: { chain: string; mint: string } | null = null
+
+export async function getTgbpMint(event: H3Event): Promise<string | null> {
+  const config = useRuntimeConfig(event)
+  const override = (config.tgbpMintAddress as string).trim()
+  const { chain } = getTgbpConfig(event)
+  if (override) return override
+  if (mintCache && mintCache.chain === chain) return mintCache.mint
+
+  try {
+    const detail = await tgbpFetch<{ data: any }>(
+      event,
+      `/api/v1/chains/${encodeURIComponent(chain)}`,
+    )
+    const data = detail.data ?? {}
+    const mint =
+      data.contract_address ??
+      data.token_address ??
+      data.mint_address ??
+      data.mint ??
+      null
+    if (typeof mint === 'string' && mint.length > 0) {
+      mintCache = { chain, mint }
+      return mint
+    }
+  } catch (err) {
+    console.warn('[tgbp] chain detail lookup for the mint address failed', err)
+  }
+
+  if (chain === 'solana-devnet') {
+    return '71G3dc4B9p9QBosLx3XhWY3ULRPAxjopngsin66M9HUb'
+  }
+  return null
+}
+
 interface BankRow {
   id: string
   customer_id?: string

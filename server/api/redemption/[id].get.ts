@@ -23,5 +23,8 @@ export default defineEventHandler(async (event): Promise<RedemptionDto> => {
     withPayoutStatus: true,
   })
 
-  return toRedemptionDto(redemption)
+  const dto = toRedemptionDto(redemption)
+  // The browser builds the burn transfer itself — it needs the tGBP mint.
+  dto.tokenMint = await getTgbpMint(event)
+  return dto
 })

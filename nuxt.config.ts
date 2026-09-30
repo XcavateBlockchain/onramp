@@ -10,11 +10,17 @@ export default defineNuxtConfig({
     tgbpApiKey: '',
     tgbpApiBaseUrl: 'https://sandbox.tgbp.io',
     tgbpChain: 'solana-devnet',
+    // Optional override for the tGBP mint address; by default it is resolved
+    // from the tGBP API's chain details (contract_address).
+    tgbpMintAddress: '',
     public: {
       // 'staging' | 'production'
       envName: 'staging',
       // 'devnet' | 'mainnet'
       solanaCluster: 'devnet',
+      // Optional Solana RPC URL for the browser burn transaction; defaults to
+      // the public api.devnet / api.mainnet-beta endpoints per cluster.
+      solanaRpcUrl: '',
     },
   },
 

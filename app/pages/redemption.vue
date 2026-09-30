@@ -30,9 +30,12 @@ const {
   redemption,
   history,
   busy,
-  quote,
-  quoteBusy,
+  burnPhase,
+  txSignature,
   wallet,
+  connectedWallet,
+  walletCount,
+  walletDetected,
   isDevnet,
   resolve,
   selectBank,
@@ -43,7 +46,9 @@ const {
   saveBank,
   review,
   backToBank,
-  createRedemption,
+  continueToBurn,
+  backToReview,
+  burn,
   refreshRedemption,
   cancelRedemption,
   reset,
@@ -77,8 +82,12 @@ const redeemedAmount = computed(() => {
   return `${formatted} tGBP`
 })
 
+const burnAmountLabel = computed(
+  () => redeemedAmount.value || `${formattedAmount.value.replace('£', '')} tGBP`,
+)
+
 const payoutAmount = computed(() => {
-  if (!redemption.value) return ''
+  if (!redemption.value) return formattedAmount.value
   return new Intl.NumberFormat('en-GB', {
     style: 'currency',
     currency: redemption.value.amount.currency || 'GBP',
@@ -150,6 +159,42 @@ function bankSubtitle(bank: {
     .join(' · ')
 }
 
+const selectedBankName = computed(
+  () =>
+    selectedBank.value &&
+    (selectedBank.value.nickname ||
+      selectedBank.value.accountHolderName ||
+      selectedBank.value.bankName),
+)
+
+const walletMismatch = computed(
+  () =>
+    wallet.value &&
+    connectedWallet.value &&
+    connectedWallet.value.address !== wallet.value,
+)
+
+/** Wallet-connect burn UI, or manual instructions when no wallet exists. */
+const burnActionAvailable = computed(
+  () =>
+    !redemption.value ||
+    (redemption.value.status === 'pending' && !txSignature.value),
+)
+
+const manualMode = computed(
+  () =>
+    walletDetected.value &&
+    walletCount.value === 0 &&
+    !connectedWallet.value,
+)
+
+const showManualInstructions = computed(
+  () =>
+    manualMode.value &&
+    redemption.value?.status === 'pending' &&
+    !txSignature.value,
+)
+
 const burnBanner = computed(() => {
   switch (redemption.value?.status) {
     case 'pending_compliance_review':
@@ -157,9 +202,28 @@ const burnBanner = computed(() => {
     case 'complete':
       return 'Burn confirmed — sending GBP to your bank…'
     default:
-      return 'Waiting for your burn…'
+      return txSignature.value
+        ? 'Burn submitted — waiting for confirmation…'
+        : 'Waiting for your burn…'
   }
 })
+
+const burnButtonLabel = computed(() => {
+  switch (burnPhase.value) {
+    case 'creating':
+      return 'Creating redemption…'
+    case 'signing':
+      return 'Check your wallet…'
+    case 'confirming':
+      return 'Confirming payout…'
+    default:
+      return `Burn ${burnAmountLabel.value}`
+  }
+})
+
+const burnTxHash = computed(
+  () => txSignature.value || redemption.value?.txHash || '',
+)
 </script>
 
 <template>
@@ -226,7 +290,7 @@ const burnBanner = computed(() => {
             <ArrowRight :size="16" />
           </button>
 
-          <div class="card card--tint destination">
+          <div v-if="wallet" class="card card--tint destination">
             <Wallet :size="16" color="#3B4F74" />
             <div>
               <p class="destination__label">Source wallet</p>
@@ -351,7 +415,7 @@ const burnBanner = computed(() => {
             <div v-if="selectedBank" class="summary__row">
               <span class="summary__label">Payout account</span>
               <span class="summary__value">
-                {{ selectedBank.nickname || selectedBank.accountHolderName || selectedBank.bankName }}
+                {{ selectedBankName }}
                 <span class="muted">{{ selectedBank.accountNumber }}</span>
               </span>
             </div>
@@ -361,40 +425,19 @@ const burnBanner = computed(() => {
                 Solana {{ isDevnet ? 'Devnet' : 'Mainnet' }}
               </span>
             </div>
-            <div class="summary__row">
-              <span class="summary__label">From wallet</span>
-              <span class="summary__value">{{ shortAddress(wallet) }}</span>
-            </div>
           </div>
-
-          <div v-if="quoteBusy" class="status-banner">
-            <LoaderCircle :size="16" class="spin" color="#3B4F74" />
-            <span>Screening your wallet…</span>
-          </div>
-          <div v-else-if="quote && !quote.allowed" class="card card--tint notice">
-            <TriangleAlert :size="16" color="#DC7DA6" />
-            <p>
-              This wallet cannot redeem tGBP. Please contact support if you
-              believe this is a mistake.
-            </p>
-          </div>
-
-          <p v-if="errorMessage" class="page__error">{{ errorMessage }}</p>
 
           <button
             type="button"
             class="btn btn--primary page__cta"
-            :disabled="busy || quoteBusy || (quote && !quote.allowed)"
-            @click="createRedemption"
+            @click="continueToBurn"
           >
-            <LoaderCircle v-if="busy" :size="16" class="spin" />
-            <Flame v-else :size="16" />
-            {{ busy ? 'Creating redemption…' : 'Get burn instructions' }}
+            Continue
+            <ArrowRight :size="16" />
           </button>
           <button
             type="button"
             class="btn btn--ghost"
-            :disabled="busy"
             @click="backToBank"
           >
             <ArrowLeft :size="16" />
@@ -402,10 +445,10 @@ const burnBanner = computed(() => {
           </button>
         </section>
 
-        <!-- Burn instructions + status --------------------------------- -->
-        <section v-else-if="step === 'burn' && redemption" key="burn">
+        <!-- Burn: connect wallet + sign, then status ------------------- -->
+        <section v-else-if="step === 'burn'" key="burn">
           <!-- Terminal states -->
-          <div v-if="redemption.status === 'paid'" class="center">
+          <div v-if="redemption?.status === 'paid'" class="center">
             <div class="icon-badge icon-badge--green">
               <CircleCheck :size="22" />
             </div>
@@ -416,9 +459,9 @@ const burnBanner = computed(() => {
               transfer.
             </p>
             <a
-              v-if="redemption.txHash"
+              v-if="burnTxHash"
               class="explorer"
-              :href="explorerUrl(redemption.txHash)"
+              :href="explorerUrl(burnTxHash)"
               target="_blank"
               rel="noopener"
             >
@@ -430,7 +473,7 @@ const burnBanner = computed(() => {
             </button>
           </div>
 
-          <div v-else-if="redemption.status === 'failed'" class="center">
+          <div v-else-if="redemption?.status === 'failed'" class="center">
             <div class="icon-badge icon-badge--pink">
               <CircleX :size="22" />
             </div>
@@ -444,7 +487,7 @@ const burnBanner = computed(() => {
             </button>
           </div>
 
-          <div v-else-if="redemption.status === 'cancelled'" class="center">
+          <div v-else-if="redemption?.status === 'cancelled'" class="center">
             <div class="icon-badge icon-badge--gold">
               <CircleX :size="22" />
             </div>
@@ -457,7 +500,7 @@ const burnBanner = computed(() => {
             </button>
           </div>
 
-          <div v-else-if="redemption.status === 'payout_skipped'" class="center">
+          <div v-else-if="redemption?.status === 'payout_skipped'" class="center">
             <div class="icon-badge icon-badge--gold">
               <CircleX :size="22" />
             </div>
@@ -467,9 +510,9 @@ const burnBanner = computed(() => {
               contact support.
             </p>
             <a
-              v-if="redemption.txHash"
+              v-if="burnTxHash"
               class="explorer"
-              :href="explorerUrl(redemption.txHash)"
+              :href="explorerUrl(burnTxHash)"
               target="_blank"
               rel="noopener"
             >
@@ -481,16 +524,18 @@ const burnBanner = computed(() => {
             </button>
           </div>
 
-          <!-- Pending / in-flight: burn instructions -->
+          <!-- Burn action + in-flight status ---------------------------- -->
           <template v-else>
-            <h1 class="page__heading">Complete your burn</h1>
+            <h1 class="page__heading">
+              {{ redemption ? 'Complete your burn' : 'Burn your tGBP' }}
+            </h1>
             <p class="subdued page__lede">
-              Send exactly <strong>{{ redeemedAmount }}</strong> to the burn
-              address from your Xcavate wallet. Your GBP payout starts once the
-              burn confirms on-chain.
+              Connect your Solana wallet and burn
+              <strong>{{ burnAmountLabel }}</strong>. Your GBP payout starts
+              once the burn confirms on-chain.
             </p>
 
-            <div class="status-banner">
+            <div v-if="redemption" class="status-banner">
               <LoaderCircle :size="16" class="spin" color="#3B4F74" />
               <span>{{ burnBanner }}</span>
               <StatusPill :status="redemption.status" />
@@ -499,7 +544,7 @@ const burnBanner = computed(() => {
             <div class="card summary">
               <div class="summary__row">
                 <span class="summary__label">You burn</span>
-                <span class="summary__value">{{ redeemedAmount }}</span>
+                <span class="summary__value">{{ burnAmountLabel }}</span>
               </div>
               <div v-if="feeAmount" class="summary__row">
                 <span class="summary__label">Fee</span>
@@ -511,38 +556,116 @@ const burnBanner = computed(() => {
                   {{ payoutAmount }}
                 </span>
               </div>
-              <div v-if="redemption.bankAccount" class="summary__row">
+              <div class="summary__row">
                 <span class="summary__label">Payout account</span>
-                <span class="summary__value">{{ redemption.bankAccount.name }}</span>
+                <span class="summary__value">
+                  {{ redemption?.bankAccount?.name || selectedBankName }}
+                </span>
               </div>
             </div>
 
-            <template v-if="redemption.status === 'pending'">
-              <div class="card bank">
-                <CopyField
-                  v-if="redemption.burnAddress"
-                  label="Burn address"
-                  :value="redemption.burnAddress"
-                  emphasized
-                />
-                <CopyField label="Amount" :value="redeemedAmount" />
-                <CopyField label="Send from" :value="wallet" />
+            <div v-if="walletMismatch" class="card card--tint notice">
+              <TriangleAlert :size="16" color="#a06b2f" />
+              <p>
+                The connected wallet is different from your app wallet. The
+                burn will be sent from the connected wallet.
+              </p>
+            </div>
+
+            <!-- Wallet connect / burn action -->
+            <template v-if="burnActionAvailable && !manualMode">
+              <div class="burn__wallets">
+                <WalletConnect />
               </div>
 
-              <div class="card card--tint notice">
-                <TriangleAlert :size="16" color="#DC7DA6" />
-                <p>
-                  Burn the <strong>exact amount</strong> from
-                  <strong>your wallet</strong> shown above — burns that do not
-                  match cannot be matched to your redemption.
+              <p v-if="errorMessage" class="page__error">{{ errorMessage }}</p>
+
+              <button
+                v-if="connectedWallet"
+                type="button"
+                class="btn btn--primary page__cta"
+                :disabled="busy"
+                @click="burn"
+              >
+                <LoaderCircle v-if="busy" :size="16" class="spin" />
+                <Flame v-else :size="16" />
+                {{ burnButtonLabel }}
+              </button>
+            </template>
+
+            <!-- Manual fallback (no browser wallet, e.g. app webview) -->
+            <template v-else-if="manualMode">
+              <template v-if="showManualInstructions && redemption">
+                <div class="card bank">
+                  <CopyField
+                    v-if="redemption.burnAddress"
+                    label="Burn address"
+                    :value="redemption.burnAddress"
+                    emphasized
+                  />
+                  <CopyField label="Amount" :value="redeemedAmount" />
+                  <CopyField v-if="wallet" label="Send from" :value="wallet" />
+                </div>
+
+                <div class="card card--tint notice">
+                  <TriangleAlert :size="16" color="#DC7DA6" />
+                  <p>
+                    Burn the <strong>exact amount</strong> from
+                    <strong>your wallet</strong> shown above — burns that do not
+                    match cannot be matched to your redemption.
+                  </p>
+                </div>
+
+                <p v-if="errorMessage" class="page__error">{{ errorMessage }}</p>
+
+                <button
+                  type="button"
+                  class="btn btn--primary page__cta"
+                  :disabled="busy"
+                  @click="refreshRedemption"
+                >
+                  <RefreshCw :size="16" />
+                  I've sent the burn
+                </button>
+              </template>
+
+              <template v-else-if="!redemption">
+                <p class="subdued burn__manual-note">
+                  No browser wallet detected. If you opened this page from the
+                  app, you can send the burn manually instead.
                 </p>
-              </div>
+                <p v-if="errorMessage" class="page__error">{{ errorMessage }}</p>
+                <button
+                  type="button"
+                  class="btn btn--primary page__cta"
+                  :disabled="busy || !wallet"
+                  @click="burn"
+                >
+                  <LoaderCircle v-if="busy" :size="16" class="spin" />
+                  <Flame v-else :size="16" />
+                  {{ busy ? 'Creating redemption…' : 'Get burn instructions' }}
+                </button>
+              </template>
+            </template>
+
+            <!-- Post-burn refresh -->
+            <template v-else-if="redemption">
+              <p v-if="errorMessage" class="page__error">{{ errorMessage }}</p>
+              <button
+                type="button"
+                class="btn btn--primary page__cta"
+                :disabled="busy"
+                @click="refreshRedemption"
+              >
+                <RefreshCw :size="16" />
+                Refresh status
+              </button>
             </template>
 
             <a
-              v-if="redemption.txHash && redemption.status !== 'pending'"
+              v-if="burnTxHash"
               class="explorer"
-              :href="explorerUrl(redemption.txHash)"
+              :href="explorerUrl(burnTxHash)"
               target="_blank"
               rel="noopener"
             >
@@ -550,25 +673,24 @@ const burnBanner = computed(() => {
               <ExternalLink :size="14" />
             </a>
 
-            <p v-if="errorMessage" class="page__error">{{ errorMessage }}</p>
-
             <button
-              type="button"
-              class="btn btn--primary page__cta"
-              :disabled="busy"
-              @click="refreshRedemption"
-            >
-              <RefreshCw :size="16" />
-              {{ redemption.status === 'pending' ? "I've sent the burn" : 'Refresh status' }}
-            </button>
-            <button
-              v-if="redemption.status === 'pending'"
+              v-if="redemption?.status === 'pending' && !txSignature"
               type="button"
               class="btn btn--ghost"
               :disabled="busy"
               @click="cancelRedemption"
             >
               Cancel this redemption
+            </button>
+            <button
+              v-else-if="!redemption"
+              type="button"
+              class="btn btn--ghost"
+              :disabled="busy"
+              @click="backToReview"
+            >
+              <ArrowLeft :size="16" />
+              Back
             </button>
           </template>
         </section>
@@ -792,6 +914,15 @@ const burnBanner = computed(() => {
   color: var(--x-blue);
   font-weight: 700;
   text-decoration: none;
+}
+
+.burn__wallets {
+  margin-top: 16px;
+}
+
+.burn__manual-note {
+  margin-top: 16px;
+  font-size: 13px;
 }
 
 .page__cta + .btn--ghost {

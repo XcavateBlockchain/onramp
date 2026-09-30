@@ -30,11 +30,20 @@ https://<host>/production/redemption?sumsubId=<sumsub-applicant-id>&wallet=<sola
   `redemption_approved: false` until approved on the tGBP side) → register the
   wallet as a burn address (`POST /api/v1/addresses/burn`, skipped when already
   registered) and screen it (`POST /api/v1/redemptions/quote`) → create the
-  redemption (`POST /api/v1/redemptions`) → the user burns the exact tGBP amount
-  to the shared protocol `burnAddress` from their wallet → poll
-  `GET /api/v1/redemptions/{id}/with-payout-status` until `paid` / `failed`.
+  redemption (`POST /api/v1/redemptions`). The user then burns the tGBP right
+  from the page: connect any Solana browser wallet (Wallet Standard; Phantom,
+  Solflare, …), the app builds the SPL transfer to the shared protocol
+  `burnAddress` with `@solana/web3.js`, the wallet signs it, and the signature
+  is handed to tGBP (`POST /api/v1/redemptions/{id}/burn-confirmation`) before
+  polling `GET /api/v1/redemptions/{id}/with-payout-status` until `paid` /
+  `failed`. When no browser wallet exists (the app webview), the page falls
+  back to manual burn instructions. The burn source is the connected wallet —
+  it is the address registered and screened at creation.
 - Minting and redemption are **Solana-only**: `solana` on production,
-  `solana-devnet` on staging.
+  `solana-devnet` on staging. The browser-side burn works on both clusters via
+  `NUXT_PUBLIC_SOLANA_CLUSTER` (+ optional `NUXT_PUBLIC_SOLANA_RPC_URL`); the
+  tGBP mint address is resolved from the tGBP chain details (override with
+  `NUXT_TGBP_MINT_ADDRESS`).
 
 ## Environments
 
@@ -54,6 +63,8 @@ Both variants run from the same Docker image; the difference is runtime env:
 | `NUXT_PUBLIC_SOLANA_CLUSTER`| `devnet` / `mainnet` (explorer links)     |
 | `NUXT_APP_BASE_URL`         | `/staging/` / `/production/` (set in compose) |
 | `NITRO_PORT` / `NITRO_HOST` | listener config (set in compose)          |
+| `NUXT_PUBLIC_SOLANA_RPC_URL` | (optional) Solana RPC for the browser burn tx |
+| `NUXT_TGBP_MINT_ADDRESS`    | (optional) override the tGBP mint address |
 
 ## Local development
 
