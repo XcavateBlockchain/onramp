@@ -7,7 +7,6 @@ import {
   Clock,
   ExternalLink,
   Flame,
-  Landmark,
   LoaderCircle,
   Plus,
   RefreshCw,
@@ -25,6 +24,7 @@ const {
   customer,
   amount,
   banks,
+  usableBanks,
   selectedBankId,
   selectedBank,
   redemption,
@@ -36,11 +36,13 @@ const {
   isDevnet,
   resolve,
   selectBank,
+  continueToBank,
+  backToAmount,
   startAddBank,
   cancelAddBank,
   saveBank,
   review,
-  backToForm,
+  backToBank,
   createRedemption,
   refreshRedemption,
   cancelRedemption,
@@ -50,23 +52,10 @@ const {
 } = useRedemption()
 
 const amountInput = ref<{ valid: boolean } | null>(null)
-const bankHint = ref('')
 
 onMounted(resolve)
 
-function continueToReview() {
-  if (!selectedBank.value) {
-    bankHint.value = banks.value.length
-      ? 'Select an approved bank account for the payout.'
-      : 'Add a bank account to receive your GBP payout.'
-    return
-  }
-  bankHint.value = ''
-  review()
-}
-
 function onSaveBank(details: BankFormDetails) {
-  bankHint.value = ''
   saveBank(details)
 }
 
@@ -129,6 +118,16 @@ const blockedContent = computed(() => {
         body: 'This account cannot redeem tGBP at the moment. Please contact support.',
       }
   }
+})
+
+const bankNote = computed(() => {
+  if (banks.value.length === 0) {
+    return 'No bank accounts yet — add one to receive your GBP payout.'
+  }
+  if (usableBanks.value.length === 0) {
+    return 'Your bank accounts are pending approval — you can redeem once one is approved.'
+  }
+  return ''
 })
 
 function formatSortCode(sortCode: string) {
@@ -202,8 +201,10 @@ const burnBanner = computed(() => {
           </button>
         </section>
 
-        <!-- Amount + bank form ---------------------------------------- -->
-        <section v-else-if="step === 'form'" key="form">
+        <!-- Step 1: amount -------------------------------------------- -->
+        <section v-else-if="step === 'amount'" key="amount">
+          <StepIndicator :current="1" />
+
           <h1 class="page__heading">{{ greeting }}</h1>
           <p class="subdued page__lede">
             How much tGBP would you like to redeem?
@@ -212,14 +213,43 @@ const burnBanner = computed(() => {
           <AmountInput
             ref="amountInput"
             v-model="amount"
-            @submit="continueToReview"
+            @submit="continueToBank"
           />
 
-          <h2 class="banks__title">
-            <Landmark :size="16" />
-            Payout account
-          </h2>
-          <div v-if="banks.length" class="card banks__card">
+          <button
+            type="button"
+            class="btn btn--primary page__cta"
+            :disabled="!amountInput?.valid"
+            @click="continueToBank"
+          >
+            Continue
+            <ArrowRight :size="16" />
+          </button>
+
+          <div class="card card--tint destination">
+            <Wallet :size="16" color="#3B4F74" />
+            <div>
+              <p class="destination__label">Source wallet</p>
+              <p class="destination__value">
+                {{ shortAddress(wallet) }}
+                <span class="muted">· Solana {{ isDevnet ? 'Devnet' : 'Mainnet' }}</span>
+              </p>
+            </div>
+          </div>
+
+          <RedemptionHistory :redemptions="history" />
+        </section>
+
+        <!-- Step 2: payout bank account -------------------------------- -->
+        <section v-else-if="step === 'bank'" key="bank">
+          <StepIndicator :current="2" />
+
+          <h1 class="page__heading">Payout account</h1>
+          <p class="subdued page__lede">
+            Where should we send your {{ formattedAmount }}?
+          </p>
+
+          <div class="card banks__card">
             <button
               v-for="bank in banks"
               :key="bank.id"
@@ -248,44 +278,41 @@ const burnBanner = computed(() => {
                 color="#3B4F74"
               />
             </button>
-          </div>
-          <button
-            type="button"
-            class="btn btn--ghost banks__add"
-            @click="startAddBank"
-          >
-            <Plus :size="16" />
-            Add a bank account
-          </button>
 
-          <p v-if="bankHint" class="page__error">{{ bankHint }}</p>
+            <button type="button" class="banks__row banks__row--add" @click="startAddBank">
+              <span class="banks__add-icon">
+                <Plus :size="16" />
+              </span>
+              <span class="banks__name">Add a bank account</span>
+            </button>
+          </div>
+
+          <p v-if="bankNote" class="banks__note">{{ bankNote }}</p>
 
           <button
             type="button"
             class="btn btn--primary page__cta"
-            :disabled="!amountInput?.valid || !selectedBank"
-            @click="continueToReview"
+            :disabled="!selectedBank"
+            @click="review"
           >
             Continue
             <ArrowRight :size="16" />
           </button>
-
-          <div class="card card--tint destination">
-            <Wallet :size="16" color="#3B4F74" />
-            <div>
-              <p class="destination__label">Source wallet</p>
-              <p class="destination__value">
-                {{ shortAddress(wallet) }}
-                <span class="muted">· Solana {{ isDevnet ? 'Devnet' : 'Mainnet' }}</span>
-              </p>
-            </div>
-          </div>
-
-          <RedemptionHistory :redemptions="history" />
+          <button
+            type="button"
+            class="btn btn--ghost"
+            :disabled="busy"
+            @click="backToAmount"
+          >
+            <ArrowLeft :size="16" />
+            Back
+          </button>
         </section>
 
-        <!-- Add bank account ------------------------------------------ -->
+        <!-- Step 2b: add bank account ---------------------------------- -->
         <section v-else-if="step === 'addBank'" key="addBank">
+          <StepIndicator :current="2" />
+
           <h1 class="page__heading">Add a bank account</h1>
           <p class="subdued page__lede">
             Your GBP payout lands here. Accounts are reviewed before the first
@@ -297,8 +324,10 @@ const burnBanner = computed(() => {
           <p v-if="errorMessage" class="page__error">{{ errorMessage }}</p>
         </section>
 
-        <!-- Review ----------------------------------------------------- -->
+        <!-- Step 3: review --------------------------------------------- -->
         <section v-else-if="step === 'review'" key="review">
+          <StepIndicator :current="3" />
+
           <h1 class="page__heading">Review your redemption</h1>
           <p class="subdued page__lede">Check the details before continuing.</p>
 
@@ -366,7 +395,7 @@ const burnBanner = computed(() => {
             type="button"
             class="btn btn--ghost"
             :disabled="busy"
-            @click="backToForm"
+            @click="backToBank"
           >
             <ArrowLeft :size="16" />
             Back
@@ -627,16 +656,6 @@ const burnBanner = computed(() => {
   font-weight: 700;
 }
 
-.banks__title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 16px;
-  font-weight: 700;
-  margin: 24px 0 10px;
-  color: var(--text-subdued);
-}
-
 .banks__card {
   padding: 6px 16px;
 }
@@ -670,6 +689,22 @@ const burnBanner = computed(() => {
   opacity: 0.75;
 }
 
+.banks__row--add {
+  justify-content: flex-start;
+  gap: 10px;
+  color: var(--x-blue);
+}
+
+.banks__add-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--blue-tint);
+}
+
 .banks__main {
   display: flex;
   flex-direction: column;
@@ -686,8 +721,10 @@ const burnBanner = computed(() => {
   color: var(--text-muted);
 }
 
-.banks__add {
-  margin-top: 10px;
+.banks__note {
+  margin: 10px 2px 0;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .summary {

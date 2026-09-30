@@ -9,7 +9,8 @@ export type RedemptionStep =
   | 'loading'
   | 'error'
   | 'blocked'
-  | 'form'
+  | 'amount'
+  | 'bank'
   | 'addBank'
   | 'review'
   | 'burn'
@@ -108,7 +109,7 @@ export function useRedemption() {
       customer.value = res.customer
       banks.value = res.banks
       if (res.customer.status === 'verified') {
-        step.value = 'form'
+        step.value = 'amount'
         void loadHistory()
       } else {
         step.value = 'blocked'
@@ -137,6 +138,16 @@ export function useRedemption() {
     selectedBankId.value = id
   }
 
+  function continueToBank() {
+    errorMessage.value = ''
+    step.value = 'bank'
+  }
+
+  function backToAmount() {
+    errorMessage.value = ''
+    step.value = 'amount'
+  }
+
   function startAddBank() {
     errorMessage.value = ''
     step.value = 'addBank'
@@ -144,7 +155,7 @@ export function useRedemption() {
 
   function cancelAddBank() {
     errorMessage.value = ''
-    step.value = 'form'
+    step.value = 'bank'
   }
 
   async function saveBank(details: BankFormDetails) {
@@ -161,7 +172,7 @@ export function useRedemption() {
       )
       banks.value = [bank, ...banks.value]
       if (bank.redemptionApproved) selectedBankId.value = bank.id
-      step.value = 'form'
+      step.value = 'bank'
     } catch (err: any) {
       errorMessage.value = readError(err).message
       // stay on addBank so the user can fix the details
@@ -198,8 +209,8 @@ export function useRedemption() {
     }
   }
 
-  function backToForm() {
-    step.value = 'form'
+  function backToBank() {
+    step.value = 'bank'
   }
 
   async function createRedemption() {
@@ -279,7 +290,7 @@ export function useRedemption() {
     amount.value = ''
     errorMessage.value = ''
     quote.value = null
-    step.value = 'form'
+    step.value = 'amount'
   }
 
   function explorerUrl(txHash: string) {
@@ -312,11 +323,13 @@ export function useRedemption() {
     isDevnet,
     resolve,
     selectBank,
+    continueToBank,
+    backToAmount,
     startAddBank,
     cancelAddBank,
     saveBank,
     review,
-    backToForm,
+    backToBank,
     createRedemption,
     refreshRedemption,
     cancelRedemption,
