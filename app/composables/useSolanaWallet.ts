@@ -177,6 +177,9 @@ export function useSolanaWallet() {
     const web3 = await import('@solana/web3.js')
     const connection = new web3.Connection(rpcUrl.value, 'confirmed')
     const owner = new web3.PublicKey(conn.address)
+    const NULL_ADDRESS_PK = new web3.PublicKey(
+      '11111111111111111111111111111111',
+    )
 
     const tx = new web3.Transaction()
     let sourceTokenAccount: InstanceType<typeof web3.PublicKey> | null = null
@@ -207,16 +210,36 @@ export function useSolanaWallet() {
         }
       }
 
-      // The connected wallet must be the only required signer — otherwise
-      // this redemption expects the burn from a different address.
+      // The API marks frontend-supplied accounts with the null-address
+      // placeholder (the same convention as its documented fee_payer
+      // placeholder) — the connected wallet takes those over. Any signer left
+      // that is not the connected wallet means the burn was prepared for a
+      // different address (e.g. another wallet registered earlier).
+      const foreignSigners = new Set<string>()
       for (const ix of tx.instructions) {
         for (const key of ix.keys) {
+          if (key.isSigner && key.pubkey.equals(NULL_ADDRESS_PK)) {
+            key.pubkey = owner
+            continue
+          }
           if (key.isSigner && !key.pubkey.equals(owner)) {
-            throw new Error(
-              'This redemption expects the burn from a different wallet. Connect the wallet you registered with and try again.',
-            )
+            foreignSigners.add(key.pubkey.toBase58())
           }
         }
+      }
+      if (foreignSigners.size > 0) {
+        const expected = [...foreignSigners]
+        // Full detail for support; the UI error names the expected address.
+        console.warn(
+          '[tgbp burn] prebuilt instructions require signers',
+          expected,
+          '— connected wallet:',
+          owner.toBase58(),
+        )
+        const first = expected[0]
+        throw new Error(
+          `This redemption expects the burn from ${first.slice(0, 6)}…${first.slice(-4)}. Connect that wallet and try again.`,
+        )
       }
     } else {
       if (!params.mint || !params.burnAddress) {
@@ -305,6 +328,20 @@ export function useSolanaWallet() {
       if (tooLow) {
         throw new Error('This wallet does not hold enough tGBP for the burn.')
       }
+    }
+
+    // The wallet also pays the network fee (plus token-account rent the first
+    // time) in SOL — fail readably instead of with an RPC fee error.
+    let tooLittleSol = false
+    try {
+      tooLittleSol = (await connection.getBalance(owner)) < 5_000_000
+    } catch {
+      // RPC hiccup — let the transaction attempt proceed
+    }
+    if (tooLittleSol) {
+      throw new Error(
+        'This wallet needs a little SOL to pay the network fee (about 0.005 SOL).',
+      )
     }
 
     tx.feePayer = owner

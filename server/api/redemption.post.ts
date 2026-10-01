@@ -98,5 +98,18 @@ export default defineEventHandler(async (event): Promise<RedemptionDto> => {
   // The browser builds the burn transfer itself — it needs the tGBP mint.
   dto.tokenMint = await getTgbpMint(event)
   dto.bank = bank
+
+  // Diagnostic trace of who tGBP prepared the burn for — without it, a
+  // signer mismatch in the browser leaves no server-side evidence.
+  const signers = (dto.transactionData?.instructions ?? [])
+    .flatMap((ix) => ix.accounts)
+    .filter((a) => a.isSigner)
+    .map((a) => a.pubkey)
+  console.log(
+    `[tgbp] redemption ${dto.id}: burn source registered as ${wallet}; ` +
+      `prebuilt instructions=${dto.transactionData?.instructions?.length ?? 0}, ` +
+      `signers=${signers.join(',') || 'none'}`,
+  )
+
   return dto
 })

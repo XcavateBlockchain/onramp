@@ -22,13 +22,23 @@ export default defineEventHandler(async (event): Promise<RedemptionDto> => {
 
   const { bank } = await getOwnedRedemption(event, customer.id, redemptionId)
 
-  const confirmed = await tgbpFetch<{ data: any }>(
+  // The confirmation response is a payout-status object (payout_initiated /
+  // payout_skipped / payout_withheld + bankProviderCode), not a full
+  // redemption — re-fetch the redemption for the DTO.
+  await tgbpFetch(
     event,
     `/api/v1/redemptions/${encodeURIComponent(redemptionId)}/burn-confirmation`,
     { method: 'POST', body: { txHash } },
   )
 
-  const dto = toRedemptionDto(confirmed.data)
+  const { redemption } = await getOwnedRedemption(
+    event,
+    customer.id,
+    redemptionId,
+    { withPayoutStatus: true },
+  )
+
+  const dto = toRedemptionDto(redemption)
   dto.tokenMint = await getTgbpMint(event)
   dto.bank = bank
   return dto
