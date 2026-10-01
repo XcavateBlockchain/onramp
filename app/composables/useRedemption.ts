@@ -241,8 +241,10 @@ export function useRedemption() {
       const current = redemption.value
       const conn = solanaWallet.connected.value
       if (conn && !txSignature.value && current.status === 'pending') {
-        const hasInstructions = !!current.transactionData?.instructions?.length
-        if (!hasInstructions && (!current.burnAddress || !current.tokenMint)) {
+        if (
+          !current.tokenMint ||
+          (!current.burnAddress && !current.transactionData?.instructions?.length)
+        ) {
           throw new Error(
             'Burn details are unavailable. Please go back and try again.',
           )

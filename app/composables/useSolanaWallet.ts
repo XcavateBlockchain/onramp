@@ -44,12 +44,39 @@ export interface ConnectedWallet {
 const TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
 const TOKEN_2022_PROGRAM_ID = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
 const ATA_PROGRAM_ID = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'
+const MEMO_PROGRAM_IDS = new Set([
+  'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr',
+  'Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo',
+])
 
 const wallets = ref<WalletChoice[]>([])
 const connected = ref<ConnectedWallet | null>(null)
 const connecting = ref(false)
 const detected = ref(false)
 let listenerInstalled = false
+
+/** Map an RPC submission failure to something the user can act on. */
+function sendErrorMessage(message: string, logs: string[] | null): string {
+  const text = [...(logs ?? []), message].join(' ')
+  if (/insufficient (funds|lamports)/i.test(text)) {
+    return 'Not enough SOL in this wallet to pay the network fee.'
+  }
+  if (/insufficient/i.test(text) && /token|funds/i.test(text)) {
+    return 'This wallet does not hold enough tGBP for the burn.'
+  }
+  if (/owner does not match|invalid owner|missing required signature/i.test(text)) {
+    return 'The burn accounts do not match this wallet. Please contact support.'
+  }
+  if (/blockhash|expired/i.test(text)) {
+    return 'The transaction expired before it was sent. Please try again.'
+  }
+  if (/invalid account|account not found|invalid account data|custom program error/i.test(text)) {
+    return 'The burn could not be completed — make sure this wallet holds the tGBP and try again.'
+  }
+  return message && message.length <= 140
+    ? message
+    : 'The burn transaction failed. Please try again.'
+}
 
 export function useSolanaWallet() {
   const config = useRuntimeConfig()
@@ -177,112 +204,81 @@ export function useSolanaWallet() {
     const web3 = await import('@solana/web3.js')
     const connection = new web3.Connection(rpcUrl.value, 'confirmed')
     const owner = new web3.PublicKey(conn.address)
-    const NULL_ADDRESS_PK = new web3.PublicKey(
-      '11111111111111111111111111111111',
+
+    if (!params.mint) {
+      throw new Error(
+        'The tGBP token is not configured on this network. Please contact support.',
+      )
+    }
+
+    const mint = new web3.PublicKey(params.mint)
+    const tokenProgram = new web3.PublicKey(TOKEN_PROGRAM_ID)
+    const ataProgram = new web3.PublicKey(ATA_PROGRAM_ID)
+
+    const deriveAta = async (
+      accountOwner: InstanceType<typeof web3.PublicKey>,
+    ) =>
+      (
+        await web3.PublicKey.findProgramAddress(
+          [accountOwner.toBuffer(), tokenProgram.toBuffer(), mint.toBuffer()],
+          ataProgram,
+        )
+      )[0]
+
+    let decimals: number
+    try {
+      decimals = (await connection.getTokenSupply(mint)).value.decimals
+    } catch {
+      throw new Error(
+        'The tGBP token could not be found on this network. Please contact support.',
+      )
+    }
+    const rawAmount = BigInt(Math.round(params.amount * 10 ** decimals))
+
+    // Self-build the transfer so every account is consistent with the
+    // signing wallet: source = the wallet's own token account, authority =
+    // the wallet. tGBP's prebuilt instructions only provide the destination
+    // token account (what its listener watches) and any memo instruction.
+    const sourceTokenAccount = await deriveAta(owner)
+
+    const burnIx = (params.transactionData?.instructions ?? []).find(
+      (ix) =>
+        ix.programId === TOKEN_PROGRAM_ID ||
+        ix.programId === TOKEN_2022_PROGRAM_ID,
     )
-
-    const tx = new web3.Transaction()
-    let sourceTokenAccount: InstanceType<typeof web3.PublicKey> | null = null
-
-    if (params.transactionData?.instructions?.length) {
-      // Rebuild the transaction exactly as tGBP prepared it; the fee payer
-      // and blockhash are placeholders we fill below (per the API docs).
-      for (const ix of params.transactionData.instructions) {
-        const keys = ix.accounts.map((a) => ({
-          pubkey: new web3.PublicKey(a.pubkey),
-          isSigner: a.isSigner,
-          isWritable: a.isWritable,
-        }))
-        tx.add(
-          new web3.TransactionInstruction({
-            programId: new web3.PublicKey(ix.programId),
-            keys,
-            data: Buffer.from(ix.data, 'base64'),
-          }),
-        )
-        // SPL Transfer/TransferChecked carry the source token account first.
-        if (
-          !sourceTokenAccount &&
-          (ix.programId === TOKEN_PROGRAM_ID || ix.programId === TOKEN_2022_PROGRAM_ID) &&
-          keys.length > 0
-        ) {
-          sourceTokenAccount = keys[0].pubkey
-        }
+    let destTokenAccount: InstanceType<typeof web3.PublicKey> | null = null
+    if (burnIx && burnIx.accounts.length >= 2) {
+      try {
+        destTokenAccount = new web3.PublicKey(burnIx.accounts[1].pubkey)
+      } catch {
+        destTokenAccount = null
       }
+    }
 
-      // The API marks frontend-supplied accounts with the null-address
-      // placeholder (the same convention as its documented fee_payer
-      // placeholder) — the connected wallet takes those over. Any signer left
-      // that is not the connected wallet means the burn was prepared for a
-      // different address (e.g. another wallet registered earlier).
-      const foreignSigners = new Set<string>()
-      for (const ix of tx.instructions) {
-        for (const key of ix.keys) {
-          if (key.isSigner && key.pubkey.equals(NULL_ADDRESS_PK)) {
-            key.pubkey = owner
-            continue
-          }
-          if (key.isSigner && !key.pubkey.equals(owner)) {
-            foreignSigners.add(key.pubkey.toBase58())
-          }
-        }
-      }
-      if (foreignSigners.size > 0) {
-        const expected = [...foreignSigners]
-        // Full detail for support; the UI error names the expected address.
-        console.warn(
-          '[tgbp burn] prebuilt instructions require signers',
-          expected,
-          '— connected wallet:',
-          owner.toBase58(),
-        )
-        const first = expected[0]
-        throw new Error(
-          `This redemption expects the burn from ${first.slice(0, 6)}…${first.slice(-4)}. Connect that wallet and try again.`,
-        )
-      }
-    } else {
-      if (!params.mint || !params.burnAddress) {
+    const sink = params.burnAddress
+      ? new web3.PublicKey(params.burnAddress)
+      : null
+    const sinkAta = sink ? await deriveAta(sink) : null
+    if (!destTokenAccount) {
+      if (!sinkAta) {
         throw new Error(
           'Burn details are unavailable. Please go back and try again.',
         )
       }
+      destTokenAccount = sinkAta
+    }
 
-      const mint = new web3.PublicKey(params.mint)
-      const sink = new web3.PublicKey(params.burnAddress)
-      const tokenProgram = new web3.PublicKey(TOKEN_PROGRAM_ID)
-      const ataProgram = new web3.PublicKey(ATA_PROGRAM_ID)
+    const tx = new web3.Transaction()
 
-      const deriveAta = async (
-        accountOwner: InstanceType<typeof web3.PublicKey>,
-      ) =>
-        (
-          await web3.PublicKey.findProgramAddress(
-            [accountOwner.toBuffer(), tokenProgram.toBuffer(), mint.toBuffer()],
-            ataProgram,
-          )
-        )[0]
-
-      let decimals: number
-      try {
-        decimals = (await connection.getTokenSupply(mint)).value.decimals
-      } catch {
-        throw new Error(
-          'The tGBP token could not be found on this network. Please contact support.',
-        )
-      }
-      const rawAmount = BigInt(Math.round(params.amount * 10 ** decimals))
-
-      sourceTokenAccount = await deriveAta(owner)
-      const destAta = await deriveAta(sink)
-
-      // Create the burn sink's token account if it does not exist yet.
+    // Create the sink's token account when that is the destination and it
+    // does not exist yet (idempotent — no-op otherwise).
+    if (sink && sinkAta && destTokenAccount.equals(sinkAta)) {
       tx.add(
         new web3.TransactionInstruction({
           programId: ataProgram,
           keys: [
             { pubkey: owner, isSigner: true, isWritable: true },
-            { pubkey: destAta, isSigner: false, isWritable: true },
+            { pubkey: sinkAta, isSigner: false, isWritable: true },
             { pubkey: sink, isSigner: false, isWritable: false },
             { pubkey: mint, isSigner: false, isWritable: false },
             {
@@ -295,39 +291,54 @@ export function useSolanaWallet() {
           data: Buffer.from([1]), // createAssociatedTokenAccountIdempotent
         }),
       )
+    }
 
-      const data = Buffer.alloc(10)
-      data[0] = 12 // TransferChecked
-      data.writeBigUInt64LE(rawAmount, 1)
-      data[9] = decimals
+    // A memo ties the burn to the redemption on tGBP's side; carry it over.
+    // Its meaningful signer is the burning wallet.
+    for (const ix of params.transactionData?.instructions ?? []) {
+      if (!MEMO_PROGRAM_IDS.has(ix.programId)) continue
       tx.add(
         new web3.TransactionInstruction({
-          programId: tokenProgram,
-          keys: [
-            { pubkey: sourceTokenAccount, isSigner: false, isWritable: true },
-            { pubkey: mint, isSigner: false, isWritable: false },
-            { pubkey: destAta, isSigner: false, isWritable: true },
-            { pubkey: owner, isSigner: true, isWritable: false },
-          ],
-          data,
+          programId: new web3.PublicKey(ix.programId),
+          keys: ix.accounts.map((a) => ({
+            pubkey: a.isSigner ? owner : new web3.PublicKey(a.pubkey),
+            isSigner: a.isSigner,
+            isWritable: a.isWritable,
+          })),
+          data: Buffer.from(ix.data, 'base64'),
         }),
       )
     }
 
+    const data = Buffer.alloc(10)
+    data[0] = 12 // TransferChecked
+    data.writeBigUInt64LE(rawAmount, 1)
+    data[9] = decimals
+    tx.add(
+      new web3.TransactionInstruction({
+        programId: tokenProgram,
+        keys: [
+          { pubkey: sourceTokenAccount, isSigner: false, isWritable: true },
+          { pubkey: mint, isSigner: false, isWritable: false },
+          { pubkey: destTokenAccount, isSigner: false, isWritable: true },
+          { pubkey: owner, isSigner: true, isWritable: false },
+        ],
+        data,
+      }),
+    )
+
     // Readable failure instead of an opaque on-chain error when the wallet
     // does not hold enough tGBP. RPC hiccups here must not block the burn.
-    if (sourceTokenAccount) {
-      let tooLow = false
-      try {
-        const balance =
-          await connection.getTokenAccountBalance(sourceTokenAccount)
-        tooLow = (balance.value.uiAmount ?? 0) < params.amount - 1e-9
-      } catch {
-        // no token account readable — let the transaction attempt proceed
-      }
-      if (tooLow) {
-        throw new Error('This wallet does not hold enough tGBP for the burn.')
-      }
+    let tgbpTooLow = false
+    try {
+      const balance =
+        await connection.getTokenAccountBalance(sourceTokenAccount)
+      tgbpTooLow = (balance.value.uiAmount ?? 0) < params.amount - 1e-9
+    } catch {
+      // no token account readable — let the transaction attempt proceed
+    }
+    if (tgbpTooLow) {
+      throw new Error('This wallet does not hold enough tGBP for the burn.')
     }
 
     // The wallet also pays the network fee (plus token-account rent the first
@@ -371,7 +382,13 @@ export function useSolanaWallet() {
           const signature = await connection.sendRawTransaction(
             signed.signedTransaction,
           )
-          await connection.confirmTransaction(signature, 'confirmed')
+          // Confirmation is best-effort: the burn-confirmation call and
+          // tGBP's own listener pick the tx up even if this times out.
+          try {
+            await connection.confirmTransaction(signature, 'confirmed')
+          } catch {
+            // proceed — submission succeeded
+          }
           return signature
         }
 
@@ -389,25 +406,42 @@ export function useSolanaWallet() {
       const legacy = conn.choice.legacy
       if (legacy.signAndSendTransaction) {
         const { signature } = await legacy.signAndSendTransaction(tx)
-        await connection.confirmTransaction(signature, 'confirmed')
+        try {
+          await connection.confirmTransaction(signature, 'confirmed')
+        } catch {
+          // proceed — submission succeeded
+        }
         return signature
       }
       const signedTx = await legacy.signTransaction(tx)
       const signature = await connection.sendRawTransaction(
         signedTx.serialize(),
       )
-      await connection.confirmTransaction(signature, 'confirmed')
+      try {
+        await connection.confirmTransaction(signature, 'confirmed')
+      } catch {
+        // proceed — submission succeeded
+      }
       return signature
     } catch (err: any) {
       const message = String(err?.message ?? err ?? '')
       if (err?.code === 4001 || /reject|declin|cancel/i.test(message)) {
         throw new Error('The signature request was rejected in the wallet.')
       }
-      throw new Error(
-        message && message.length <= 140
-          ? message
-          : 'The burn transaction failed. Please try again.',
-      )
+      // Program logs are the only useful evidence for an on-chain failure —
+      // keep them in the console and give the user the readable version.
+      let logs: string[] | null = Array.isArray(err?.logs) ? err.logs : null
+      if (!logs && typeof err?.getLogs === 'function') {
+        try {
+          logs = await err.getLogs(connection)
+        } catch {
+          logs = null
+        }
+      }
+      if (logs?.length) {
+        console.warn('[tgbp burn] send failed, program logs:', logs)
+      }
+      throw new Error(sendErrorMessage(message, logs))
     }
   }
 

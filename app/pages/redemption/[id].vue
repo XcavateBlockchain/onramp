@@ -65,8 +65,10 @@ async function burnFromDetail() {
   burnBusy.value = true
   burnError.value = ''
   try {
-    const hasInstructions = !!current.transactionData?.instructions?.length
-    if (!hasInstructions && (!current.burnAddress || !current.tokenMint)) {
+    if (
+      !current.tokenMint ||
+      (!current.burnAddress && !current.transactionData?.instructions?.length)
+    ) {
       throw new Error('Burn details are unavailable. Please try again later.')
     }
     const signature = await sendSplBurn({
