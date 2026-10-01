@@ -20,7 +20,7 @@ export default defineEventHandler(async (event): Promise<RedemptionDto> => {
   const txHash = readTxHash(body?.txHash)
   const customer = await resolveCustomerBySumsubId(event, sumsubId)
 
-  await getOwnedRedemption(event, customer.id, redemptionId)
+  const { bank } = await getOwnedRedemption(event, customer.id, redemptionId)
 
   const confirmed = await tgbpFetch<{ data: any }>(
     event,
@@ -30,5 +30,6 @@ export default defineEventHandler(async (event): Promise<RedemptionDto> => {
 
   const dto = toRedemptionDto(confirmed.data)
   dto.tokenMint = await getTgbpMint(event)
+  dto.bank = bank
   return dto
 })

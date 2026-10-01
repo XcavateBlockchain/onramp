@@ -218,6 +218,12 @@ const banner = computed(() => {
   }
 })
 
+function formatSortCode(sortCode: string) {
+  return /^\d{6}$/.test(sortCode)
+    ? `${sortCode.slice(0, 2)}-${sortCode.slice(2, 4)}-${sortCode.slice(4)}`
+    : sortCode
+}
+
 function formatDate(iso: string) {
   return new Intl.DateTimeFormat('en-GB', {
     day: 'numeric',
@@ -286,7 +292,7 @@ function explorerUrl(txHash: string) {
               {{ payoutAmount }}
             </span>
           </div>
-          <div v-if="redemption.bankAccount" class="summary__row">
+          <div v-if="redemption.bankAccount && !redemption.bank" class="summary__row">
             <span class="summary__label">Payout account</span>
             <span class="summary__value">{{ redemption.bankAccount.name }}</span>
           </div>
@@ -303,6 +309,27 @@ function explorerUrl(txHash: string) {
           <div v-if="redemption.payoutStatus" class="summary__row">
             <span class="summary__label">Payout</span>
             <span class="summary__value">{{ redemption.payoutStatus }}</span>
+          </div>
+        </div>
+
+        <div v-if="redemption.bank" class="card bank-details">
+          <div class="summary__row">
+            <span class="summary__label">Account holder</span>
+            <span class="summary__value">
+              {{ redemption.bank.accountHolderName || redemption.bank.nickname }}
+            </span>
+          </div>
+          <div class="summary__row">
+            <span class="summary__label">Bank</span>
+            <span class="summary__value">{{ redemption.bank.bankName }}</span>
+          </div>
+          <div v-if="redemption.bank.sortCode" class="summary__row">
+            <span class="summary__label">Sort code</span>
+            <span class="summary__value">{{ formatSortCode(redemption.bank.sortCode) }}</span>
+          </div>
+          <div v-if="redemption.bank.accountNumber" class="summary__row">
+            <span class="summary__label">Account number</span>
+            <span class="summary__value">{{ redemption.bank.accountNumber }}</span>
           </div>
         </div>
 
@@ -467,6 +494,11 @@ function explorerUrl(txHash: string) {
 
 .summary {
   padding: 8px 16px;
+}
+
+.bank-details {
+  padding: 8px 16px;
+  margin-top: 16px;
 }
 
 .summary__row {

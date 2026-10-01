@@ -12,7 +12,6 @@ import {
   RefreshCw,
   ShieldCheck,
   TriangleAlert,
-  Wallet,
 } from 'lucide-vue-next'
 import type { BankFormDetails } from '~/composables/useRedemption'
 
@@ -283,17 +282,6 @@ const burnTxHash = computed(
             Continue
             <ArrowRight :size="16" />
           </button>
-
-          <div v-if="wallet" class="card card--tint destination">
-            <Wallet :size="16" color="#3B4F74" />
-            <div>
-              <p class="destination__label">Source wallet</p>
-              <p class="destination__value">
-                {{ shortAddress(wallet) }}
-                <span class="muted">· Solana {{ isDevnet ? 'Devnet' : 'Mainnet' }}</span>
-              </p>
-            </div>
-          </div>
 
           <RedemptionHistory :redemptions="history" />
         </section>
@@ -752,28 +740,8 @@ const burnTxHash = computed(
 .icon-badge--blue { background: var(--blue-tint); color: var(--x-blue); }
 .icon-badge--gold { background: var(--gold-tint); color: #a06b2f; }
 
-.destination {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 20px;
-  padding: 12px 16px;
-}
-
-.destination__label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.destination__value {
-  font-weight: 700;
-}
-
 .banks__card {
-  padding: 6px 16px;
+  padding: 6px 8px;
 }
 
 .banks__row {
@@ -781,7 +749,7 @@ const burnTxHash = computed(
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: 0 -8px;
+  margin: 0;
   padding: 10px 8px;
   border: 0;
   border-radius: var(--radius-card);

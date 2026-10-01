@@ -1,4 +1,5 @@
 import bs58 from 'bs58'
+import { markRaw } from 'vue'
 
 /**
  * Solana browser-wallet client built on the Wallet Standard events
@@ -75,12 +76,14 @@ export function useSolanaWallet() {
       return
     }
     if (wallets.value.some((w) => w.name === wallet.name)) return
-    wallets.value.push({
-      key: `std:${wallet.name}`,
-      name: wallet.name,
-      icon: wallet.icon,
-      standard: wallet,
-    })
+    wallets.value.push(
+      markRaw({
+        key: `std:${wallet.name}`,
+        name: wallet.name,
+        icon: wallet.icon,
+        standard: wallet,
+      }),
+    )
   }
 
   function detect() {
@@ -106,13 +109,20 @@ export function useSolanaWallet() {
     setTimeout(() => {
       const legacy = (window as any).solana
       if (wallets.value.length === 0 && legacy?.connect) {
-        wallets.value.push({
-          key: 'legacy:injected',
-          name: legacy.isPhantom ? 'Phantom' : 'Browser wallet',
-          legacy,
-        })
+        wallets.value.push(
+          markRaw({
+            key: 'legacy:injected',
+            name: legacy.isPhantom ? 'Phantom' : 'Browser wallet',
+            legacy,
+          }),
+        )
       }
       detected.value = true
+      const only =
+        wallets.value.length === 1 ? wallets.value[0] : undefined
+      if (only && connected.value === null && !connecting.value) {
+        connect(only).catch(() => {})
+      }
     }, 400)
   }
 

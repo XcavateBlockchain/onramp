@@ -89,6 +89,8 @@ export interface RedemptionDto {
   payoutStatus: string | null
   /** tGBP mint address on this chain — the browser needs it to build the burn tx. */
   tokenMint?: string | null
+  /** The full payout bank account, when the server matched it to the customer's banks. */
+  bank?: BankAccountDto | null
   createdAt: string
   updatedAt: string
 }

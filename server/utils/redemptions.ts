@@ -162,7 +162,8 @@ export async function ensureBurnAddress(
   }
 }
 
-export function toRedemptionDto(redemption: any): RedemptionDto {  const fee = Number(redemption.fees?.amount)
+export function toRedemptionDto(redemption: any): RedemptionDto {
+  const fee = Number(redemption.fees?.amount)
   return {
     id: redemption.redemptionId ?? redemption.id,
     status: redemption.status,
@@ -194,7 +195,8 @@ export function toRedemptionDto(redemption: any): RedemptionDto {  const fee = N
 /**
  * Fetch a redemption and prove it belongs to the customer via its
  * destination bank account. 404s otherwise — a URL with somebody else's
- * redemption id reveals nothing.
+ * redemption id reveals nothing. Returns the redemption together with the
+ * customer's matching bank account (the payout destination).
  */
 export async function getOwnedRedemption(
   event: H3Event,
@@ -210,7 +212,8 @@ export async function getOwnedRedemption(
 
   const bankId = redemption.data?.bankAccount?.id
   const banks = bankId ? await listCustomerBanks(event, customerId) : []
-  if (!bankId || !banks.some((b) => b.id === bankId)) {
+  const bank = banks.find((b) => b.id === bankId) ?? null
+  if (!bankId || !bank) {
     throw createError({
       statusCode: 404,
       message: 'Redemption not found.',
@@ -218,5 +221,5 @@ export async function getOwnedRedemption(
     })
   }
 
-  return redemption.data
+  return { redemption: redemption.data, bank }
 }

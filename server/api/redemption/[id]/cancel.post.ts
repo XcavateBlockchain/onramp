@@ -15,7 +15,7 @@ export default defineEventHandler(async (event): Promise<RedemptionDto> => {
   const sumsubId = readSumsubId(body?.sumsubId)
   const customer = await resolveCustomerBySumsubId(event, sumsubId)
 
-  await getOwnedRedemption(event, customer.id, redemptionId)
+  const { bank } = await getOwnedRedemption(event, customer.id, redemptionId)
 
   const cancelled = await tgbpFetch<{ data: any }>(
     event,
@@ -23,5 +23,7 @@ export default defineEventHandler(async (event): Promise<RedemptionDto> => {
     { method: 'POST' },
   )
 
-  return toRedemptionDto(cancelled.data)
+  const dto = toRedemptionDto(cancelled.data)
+  dto.bank = bank
+  return dto
 })

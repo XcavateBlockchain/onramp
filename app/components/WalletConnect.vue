@@ -93,14 +93,14 @@ async function onSelect(choice: Parameters<typeof connect>[0]) {
 
 <style scoped>
 .wc-card {
-  padding: 6px 16px;
+  padding: 6px 8px;
 }
 
 .wc-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 0 -8px;
+  margin: 0;
   padding: 12px 8px;
   border: 0;
   border-radius: var(--radius-card);

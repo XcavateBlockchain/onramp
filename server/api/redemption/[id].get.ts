@@ -19,12 +19,16 @@ export default defineEventHandler(async (event): Promise<RedemptionDto> => {
   const sumsubId = readSumsubId(query.sumsubId)
   const customer = await resolveCustomerBySumsubId(event, sumsubId)
 
-  const redemption = await getOwnedRedemption(event, customer.id, redemptionId, {
-    withPayoutStatus: true,
-  })
+  const { redemption, bank } = await getOwnedRedemption(
+    event,
+    customer.id,
+    redemptionId,
+    { withPayoutStatus: true },
+  )
 
   const dto = toRedemptionDto(redemption)
   // The browser builds the burn transfer itself — it needs the tGBP mint.
   dto.tokenMint = await getTgbpMint(event)
+  dto.bank = bank
   return dto
 })
