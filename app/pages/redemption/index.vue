@@ -2,6 +2,8 @@
 import {
   ArrowLeft,
   ArrowRight,
+  ChevronRight,
+  Circle,
   CircleCheck,
   CircleX,
   Clock,
@@ -323,6 +325,7 @@ const burnTxHash = computed(
                 :size="18"
                 color="#3B4F74"
               />
+              <Circle v-else :size="18" color="#c8c8c8" />
             </button>
 
             <button type="button" class="banks__row banks__row--add" @click="startAddBank">
@@ -330,6 +333,7 @@ const burnTxHash = computed(
                 <Plus :size="16" />
               </span>
               <span class="banks__name">Add a bank account</span>
+              <ChevronRight :size="16" class="banks__chevron" />
             </button>
           </div>
 
@@ -749,6 +753,7 @@ const burnTxHash = computed(
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  width: 100%;
   margin: 0;
   padding: 10px 8px;
   border: 0;
@@ -776,6 +781,11 @@ const burnTxHash = computed(
   justify-content: flex-start;
   gap: 10px;
   color: var(--x-blue);
+}
+
+.banks__chevron {
+  margin-left: auto;
+  color: var(--text-faint);
 }
 
 .banks__add-icon {

@@ -16,13 +16,23 @@ const MAX_PAGES = 10
 const PAGE_SIZE = 100
 
 /**
- * The tGBP mint address for the configured chain, needed client-side to
- * build the burn transfer. Resolved (and cached) from the tGBP chain
- * details, which carry a `contract_address` operational field; an env
- * override (NUXT_TGBP_MINT_ADDRESS) wins when set. The sandbox/devnet mint
- * is known from the xcavate-sumsub-webhook service and used as fallback.
+ * The tGBP mint address for the configured chain — fallback for building the
+ * burn transfer when a redemption carries no prebuilt `transaction_data`.
+ * Resolved (and cached) from the tGBP chain details, which carry a
+ * `contract_address` operational field; an env override
+ * (NUXT_TGBP_MINT_ADDRESS) wins when set. Both Solana mints are known
+ * (classic SPL, 9 decimals, verified on-chain):
+ *   solana-devnet: H9JAnSzaX66KioeboojT8Ng7Aw2xKLbNoCuNfWZjisYd
+ *   solana:        2zMqyX4AYCk6mgy5UZ2S7zUaLxwERhK5WjqDzkPPbSpW
+ * Returns null when unresolved — never guess: burning the wrong token to the
+ * sink would lose funds without triggering a payout.
  */
 let mintCache: { chain: string; mint: string } | null = null
+
+const KNOWN_MINTS: Record<string, string> = {
+  'solana-devnet': 'H9JAnSzaX66KioeboojT8Ng7Aw2xKLbNoCuNfWZjisYd',
+  solana: '2zMqyX4AYCk6mgy5UZ2S7zUaLxwERhK5WjqDzkPPbSpW',
+}
 
 export async function getTgbpMint(event: H3Event): Promise<string | null> {
   const config = useRuntimeConfig(event)
@@ -51,10 +61,7 @@ export async function getTgbpMint(event: H3Event): Promise<string | null> {
     console.warn('[tgbp] chain detail lookup for the mint address failed', err)
   }
 
-  if (chain === 'solana-devnet') {
-    return '71G3dc4B9p9QBosLx3XhWY3ULRPAxjopngsin66M9HUb'
-  }
-  return null
+  return KNOWN_MINTS[chain] ?? null
 }
 
 interface BankRow {
@@ -164,6 +171,7 @@ export async function ensureBurnAddress(
 
 export function toRedemptionDto(redemption: any): RedemptionDto {
   const fee = Number(redemption.fees?.amount)
+  const solanaTx = redemption.transaction_data?.solana
   return {
     id: redemption.redemptionId ?? redemption.id,
     status: redemption.status,
@@ -187,6 +195,19 @@ export function toRedemptionDto(redemption: any): RedemptionDto {
     errorCode: redemption.errorCode ?? null,
     failureReason: redemption.failureReason ?? null,
     payoutStatus: redemption.payoutStatus?.status ?? null,
+    transactionData: solanaTx?.instructions?.length
+      ? {
+          instructions: solanaTx.instructions.map((ix: any) => ({
+            programId: ix.program_id,
+            accounts: (ix.accounts ?? []).map((a: any) => ({
+              pubkey: a.pubkey,
+              isSigner: !!a.is_signer,
+              isWritable: !!a.is_writable,
+            })),
+            data: ix.data ?? '',
+          })),
+        }
+      : null,
     createdAt: redemption.created_at,
     updatedAt: redemption.updated_at,
   }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { LoaderCircle, Wallet, X } from 'lucide-vue-next'
+import { ChevronRight, LoaderCircle, Wallet, X } from 'lucide-vue-next'
 
 /**
  * Wallet picker / connected-wallet card. Detection and the connection itself
@@ -71,6 +71,7 @@ async function onSelect(choice: Parameters<typeof connect>[0]) {
         </span>
         <span class="wc-name">{{ choice.name }}</span>
         <LoaderCircle v-if="connecting" :size="14" class="spin" color="#3B4F74" />
+        <ChevronRight v-else :size="16" class="wc-chevron" />
       </button>
     </div>
 
@@ -100,6 +101,7 @@ async function onSelect(choice: Parameters<typeof connect>[0]) {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   margin: 0;
   padding: 12px 8px;
   border: 0;
@@ -116,6 +118,11 @@ async function onSelect(choice: Parameters<typeof connect>[0]) {
 
 .wc-row:active {
   background: var(--blue-tint);
+}
+
+.wc-chevron {
+  color: var(--text-faint);
+  flex: none;
 }
 
 .wc-icon {

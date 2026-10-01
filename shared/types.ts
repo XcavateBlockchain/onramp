@@ -87,12 +87,25 @@ export interface RedemptionDto {
   errorCode: string | null
   failureReason: string | null
   payoutStatus: string | null
-  /** tGBP mint address on this chain — the browser needs it to build the burn tx. */
+  /** tGBP mint address on this chain — fallback for building the burn tx. */
   tokenMint?: string | null
+  /**
+   * Prebuilt Solana burn instructions from tGBP (authoritative: correct token
+   * program, accounts and amount). `data` is base64. The frontend sets the fee
+   * payer and a fresh blockhash, then has the wallet sign.
+   */
+  transactionData?: { instructions: SolanaInstructionData[] } | null
   /** The full payout bank account, when the server matched it to the customer's banks. */
   bank?: BankAccountDto | null
   createdAt: string
   updatedAt: string
+}
+
+export interface SolanaInstructionData {
+  programId: string
+  accounts: { pubkey: string; isSigner: boolean; isWritable: boolean }[]
+  /** base64-encoded instruction data */
+  data: string
 }
 
 export interface RedemptionResolveResponse {

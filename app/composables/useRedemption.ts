@@ -241,13 +241,15 @@ export function useRedemption() {
       const current = redemption.value
       const conn = solanaWallet.connected.value
       if (conn && !txSignature.value && current.status === 'pending') {
-        if (!current.burnAddress || !current.tokenMint) {
+        const hasInstructions = !!current.transactionData?.instructions?.length
+        if (!hasInstructions && (!current.burnAddress || !current.tokenMint)) {
           throw new Error(
             'Burn details are unavailable. Please go back and try again.',
           )
         }
         burnPhase.value = 'signing'
         const signature = await solanaWallet.sendSplBurn({
+          transactionData: current.transactionData,
           mint: current.tokenMint,
           burnAddress: current.burnAddress,
           amount: current.amount.value,

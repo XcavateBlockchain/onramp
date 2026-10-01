@@ -41,9 +41,11 @@ https://<host>/production/redemption?sumsubId=<sumsub-applicant-id>&wallet=<sola
   it is the address registered and screened at creation.
 - Minting and redemption are **Solana-only**: `solana` on production,
   `solana-devnet` on staging. The browser-side burn works on both clusters via
-  `NUXT_PUBLIC_SOLANA_CLUSTER` (+ optional `NUXT_PUBLIC_SOLANA_RPC_URL`); the
-  tGBP mint address is resolved from the tGBP chain details (override with
-  `NUXT_TGBP_MINT_ADDRESS`).
+  `NUXT_PUBLIC_SOLANA_CLUSTER` (+ optional `NUXT_PUBLIC_SOLANA_RPC_URL`). The
+  burn transaction is rebuilt from the redemption's prebuilt
+  `transaction_data.solana` instructions (authoritative); the fallback SPL
+  transfer builder uses the tGBP mint resolved from the chain details
+  (override with `NUXT_TGBP_MINT_ADDRESS`).
 
 ## Environments
 
